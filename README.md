@@ -1,6 +1,6 @@
-# FlowerHub - Flower Distribution Ecommerce Platform
+# GreenLife - Flower Distribution Ecommerce Platform
 
-A MERN stack ecommerce application for flower distribution with two distinct user interfaces for wholesalers and florists.
+A complete MERN stack ecommerce application for flower distribution with hybrid database architecture and role-based interfaces for wholesalers and florists.
 
 ## 🌸 Features
 
@@ -10,10 +10,10 @@ A MERN stack ecommerce application for flower distribution with two distinct use
 - **User Profiles**: Comprehensive business information management
 
 ### Product Management
-- **Flower Catalog**: Premium carnations and spray carnations from Netherlands
-- **Dual Pricing**: Box quantities for wholesalers, individual stems for florists
-- **Smart Filtering**: Search by category, color, and availability
-- **Detailed Specifications**: Stem length, vase life, origin information
+- **Comprehensive Flower Catalog**: 10 varieties including carnations, spray carnations, roses, and lilies
+- **Dual Pricing System**: Box quantities (25 stems) for wholesalers, individual stems for florists
+- **Detailed Product Information**: Images, descriptions, colors, pricing, and specifications
+- **Mock Data Integration**: Complete catalog with fallback system for reliable display
 
 ### Shopping Experience
 - **Shopping Cart**: Add/remove items with quantity validation
@@ -29,53 +29,65 @@ A MERN stack ecommerce application for flower distribution with two distinct use
 ## 🛠 Technology Stack
 
 ### Backend
-- **Node.js** with Express.js
-- **MongoDB** with Mongoose ODM
-- **JWT** for authentication
-- **Stripe** for payment processing
-- **Helmet** for security
-- **Rate limiting** for API protection
+- **Node.js** with Express.js framework
+- **Hybrid Database Architecture**: MongoDB for catalog, SQLite for transactions
+- **JWT Authentication** with bcrypt password hashing
+- **Payment Integration**: Stripe and PayU (Poland) ready
+- **Comprehensive API**: RESTful endpoints with validation
+- **Security**: Helmet, CORS, rate limiting
 
 ### Frontend
 - **React** with TypeScript
-- **Material-UI** for components
-- **React Router** for navigation
-- **React Hook Form** with Yup validation
-- **Axios** for API calls
+- **Material-UI v5** with responsive design
+- **React Router** for client-side navigation
 - **Context API** for state management
+- **Axios** for HTTP requests
+- **Form Validation** with comprehensive error handling
 
 ## 📁 Project Structure
 
 ```
 flower/
-├── backend files (server.js, models, routes, middleware)
-├── client/
-│   ├── public/
+├── server.js                 # Main server entry point
+├── package.json             # Server dependencies
+├── config/
+│   └── database.js          # Hybrid database configuration
+├── models/
+│   ├── mongo/               # MongoDB models (Flower, Category)
+│   └── postgres/            # SQLite models (User, Order, Payment)
+├── routes/                  # API endpoints
+│   ├── auth.js             # Authentication routes
+│   ├── flowers.js          # Flower catalog API
+│   ├── orders.js           # Order management
+│   └── payments.js         # Payment processing
+├── middleware/              # Authentication & validation
+├── scripts/                 # Testing and utility scripts
+├── storage/                 # In-memory data storage
+├── client/                  # React frontend (TypeScript)
 │   ├── src/
-│   │   ├── components/
-│   │   ├── contexts/
-│   │   ├── pages/
-│   │   ├── services/
-│   │   └── App.tsx
+│   │   ├── components/     # Reusable UI components
+│   │   ├── contexts/       # React Context providers
+│   │   ├── pages/          # Route components
+│   │   ├── services/       # API service layer
+│   │   └── types/          # TypeScript definitions
 │   └── package.json
-├── seed.js
-├── package.json
 └── README.md
 ```
 
 ## 🚀 Getting Started
 
 ### Prerequisites
-- Node.js (v14 or higher)
-- MongoDB (local or cloud)
-- npm or yarn
+- Node.js (v16 or higher)
+- Git for version control
+- npm or yarn package manager
+- MongoDB (optional - uses mock data if unavailable)
 
 ### Installation
 
 1. **Clone the repository**
    ```bash
-   git clone <repository-url>
-   cd flower
+   git clone https://github.com/abidmehboob/greenslife.git
+   cd greenslife
    ```
 
 2. **Install backend dependencies**
@@ -90,92 +102,91 @@ flower/
    cd ..
    ```
 
-4. **Environment Configuration**
+4. **Environment Configuration** (Optional)
    
-   Create `.env` file in root directory:
+   Create `.env` file in root directory for production:
    ```env
    NODE_ENV=development
-   PORT=5000
+   PORT=5001
    MONGODB_URI=mongodb://localhost:27017/flower-distribution
    JWT_SECRET=your_jwt_secret_key_here_make_it_very_long_and_random
    JWT_EXPIRE=7d
    CLIENT_URL=http://localhost:3000
    
-   # Email Configuration
-   EMAIL_HOST=smtp.gmail.com
-   EMAIL_PORT=587
-   EMAIL_USER=your_email@gmail.com
-   EMAIL_PASS=your_email_password
-   
-   # Payment Configuration
+   # Payment Configuration (Optional)
    STRIPE_SECRET_KEY=sk_test_your_stripe_secret_key
-   STRIPE_PUBLISHABLE_KEY=pk_test_your_stripe_publishable_key
-   
-   # Polish Payment Provider (PayU)
    PAYU_CLIENT_ID=your_payu_client_id
    PAYU_CLIENT_SECRET=your_payu_client_secret
-   PAYU_ENVIRONMENT=sandbox
    ```
 
    Create `client/.env` file:
    ```env
-   REACT_APP_API_URL=http://localhost:5000/api
-   REACT_APP_STRIPE_PUBLISHABLE_KEY=pk_test_your_stripe_publishable_key_here
+   REACT_APP_API_URL=http://localhost:5001/api
    ```
 
-5. **Database Setup**
+   **Note**: The application works without environment files using default settings.
+
+5. **Quick Start**
    ```bash
-   # Make sure MongoDB is running
-   # Seed the database with sample flowers
-   npm run seed
+   # Start the backend server
+   npm start
+   
+   # In a new terminal, start the frontend
+   cd client
+   npm start
    ```
+
+   **Note**: SQLite database and test users are created automatically on first run.
 
 ### Development
 
 1. **Start backend server**
    ```bash
-   npm run dev
+   npm start
    ```
 
 2. **Start frontend development server** (in new terminal)
    ```bash
-   npm run client
-   ```
-
-3. **Start both simultaneously**
-   ```bash
-   npm run dev-full
+   cd client
+   npm start
    ```
 
 The application will be available at:
 - Frontend: http://localhost:3000
-- Backend API: http://localhost:5000
+- Backend API: http://localhost:5001
+
+### Test Users (Already Created)
+- **Wholesaler**: `wholesaler@test.com` / `password123`
+- **Florist**: `florist@test.com` / `password123`
+- **Admin**: `admin@test.com` / `password123`
 
 ### Production Build
 
 1. **Build the React app**
    ```bash
+   cd client
    npm run build
    ```
 
-2. **Start production server**
+2. **Test production build locally**
    ```bash
+   cd ..
    npm start
    ```
 
 ## 🏪 User Types & Interfaces
 
 ### Wholesaler Account
-- **Box Pricing**: Products shown in box quantities (25 stems per box)
-- **Volume Discounts**: Special pricing for bulk orders
-- **Minimum Orders**: 2 boxes minimum per flower type
-- **Business Features**: Tax number, wholesale pricing tiers
+- **Box Pricing**: Products displayed in box quantities (25 stems per box)
+- **Bulk Pricing**: Optimized pricing for large volume orders
+- **Professional Interface**: Business-focused UI and features
+- **Order Management**: Track large orders with detailed history
 
-### Florist Account
-- **Individual Pricing**: Products shown per stem
-- **Flexible Quantities**: Lower minimum order quantities
-- **Retail Focus**: Pricing optimized for small businesses
-- **Mixed Orders**: Easy ordering of different flower types
+### Florist Account  
+- **Individual Pricing**: Products shown per stem for retail flexibility
+- **Small Quantity Orders**: Perfect for boutique flower shops
+- **Flexible Quantities**: Order exactly what you need
+- **Retail-Focused**: Interface designed for small business needs
 
 ## 🌍 Deployment
 
@@ -187,22 +198,29 @@ The application will be available at:
    npm run build
    ```
 
-2. **Deploy to Render**
-   - Connect your GitHub repository
-   - Set build command: `npm run build`
+2. **Deploy Backend to Render**
+   - Connect GitHub repository: https://github.com/abidmehboob/greenslife
+   - Set build command: `npm install`
    - Set start command: `npm start`
-   - Add environment variables in Render dashboard
+   - Environment variables: Set `NODE_ENV=production`
 
-3. **MongoDB Atlas**
-   - Create a free MongoDB Atlas account
-   - Update `MONGODB_URI` in environment variables
+3. **Deploy Frontend**
+   - Deploy `client/` folder to Vercel or Netlify
+   - Set build command: `npm run build`
+   - Set build directory: `build`
+   - Update API URL to point to your Render backend
 
 ### Environment Variables for Production
 ```env
 NODE_ENV=production
+JWT_SECRET=your_production_jwt_secret_very_long_and_random
+CLIENT_URL=https://your-frontend-domain.vercel.app
+PORT=5001
+
+# Optional: For MongoDB (uses mock data if not provided)
 MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/flower-distribution
-JWT_SECRET=your_production_jwt_secret
-CLIENT_URL=https://your-app.render.com
+
+# Optional: For payments
 STRIPE_SECRET_KEY=sk_live_your_live_stripe_key
 PAYU_CLIENT_ID=your_production_payu_id
 ```
@@ -234,12 +252,20 @@ PAYU_CLIENT_ID=your_production_payu_id
 
 ## 🧪 Testing
 
-```bash
-# Run backend tests
-npm test
+The application includes comprehensive testing scripts:
 
-# Run frontend tests
-cd client && npm test
+```bash
+# Test user creation and authentication
+node scripts/testLogin.js
+
+# Test flowers API endpoint
+node scripts/testFlowersAPI.js
+
+# Test end-to-end functionality
+node scripts/testEndToEnd.js
+
+# Create additional test users
+node scripts/createTestUsers.js
 ```
 
 ## 🔒 Security Features
@@ -251,29 +277,33 @@ cd client && npm test
 - **CORS Configuration**: Cross-origin request handling
 - **Password Hashing**: bcrypt for secure password storage
 
-## 🌟 Features by User Type
+## 🌟 Current Implementation Status
 
-| Feature | Wholesaler | Florist |
-|---------|------------|---------|
-| Pricing Display | Per box (25 stems) | Per stem |
-| Minimum Quantity | 2 boxes | 10 stems |
-| Volume Discounts | ✅ | ❌ |
-| Tax Information | Required | Optional |
-| Priority Support | ✅ | Standard |
+| Feature | Status | Description |
+|---------|--------|-------------|
+| User Authentication | ✅ Complete | JWT-based login/register system |
+| Flower Catalog | ✅ Complete | 10 varieties with images and pricing |
+| Role-based Pricing | ✅ Complete | Wholesaler (box) vs Florist (stem) pricing |
+| Shopping Cart | ✅ Complete | Add/remove items with quantity validation |
+| Order Management | ✅ Complete | Create and track orders |
+| Payment Integration | 🔄 Ready | Stripe and PayU integration prepared |
+| Responsive Design | ✅ Complete | Mobile-friendly Material-UI interface |
+| Database Architecture | ✅ Complete | Hybrid MongoDB/SQLite system |
 
-## 🛣 Roadmap
+## 🛣 Future Enhancements
 
-- [ ] Admin panel for flower management
-- [ ] Inventory management system
-- [ ] Email notifications for orders
-- [ ] Mobile app (React Native)
+- [ ] Complete payment processing implementation
+- [ ] Email notifications for order updates
+- [ ] Admin panel for flower catalog management
+- [ ] Inventory tracking and stock management
 - [ ] Multi-language support (Polish/English)
-- [ ] Advanced analytics dashboard
-- [ ] Loyalty program for repeat customers
+- [ ] Mobile app version (React Native)
+- [ ] Advanced analytics and reporting
+- [ ] Customer loyalty program
 
 ## 📞 Support
 
-For support, email support@flowerhub.pl or create an issue in the repository.
+For support or questions, create an issue in the GitHub repository: https://github.com/abidmehboob/greenslife/issues
 
 ## 📄 License
 
@@ -287,6 +317,21 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 4. Push to the branch (`git push origin feature/AmazingFeature`)
 5. Open a Pull Request
 
+## 🗂️ Repository Structure
+
+```
+├── 📁 config/           # Database configuration (hybrid architecture)
+├── 📁 middleware/       # Authentication and validation middleware  
+├── 📁 models/           # Database models (MongoDB + SQLite)
+├── 📁 routes/           # API endpoints (auth, flowers, orders, payments)
+├── 📁 scripts/          # Testing and utility scripts
+├── 📁 storage/          # In-memory data storage
+├── 📁 client/           # React TypeScript frontend
+├── 📄 server.js         # Main server entry point  
+├── 📄 package.json      # Dependencies and scripts
+└── 📄 README.md         # This documentation
+```
+
 ---
 
-Made with ❤️ for the Polish flower distribution industry
+Made with ❤️ for the flower distribution industry • **GreenLife** 🌱
