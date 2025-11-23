@@ -1,175 +1,128 @@
 const express = require('express');
 const router = express.Router();
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-const Order = require('../models/Order');
+const stripeLib = process.env.STRIPE_SECRET_KEY ? require('stripe')(process.env.STRIPE_SECRET_KEY) : null;
+const { Order, Payment, User } = require('../models/postgres');
 const { authenticateToken } = require('../middleware/auth');
 
-// Create payment intent for Stripe
+// Helper: stubbed payment intent
+const createStubPaymentIntent = async (amount) => {
+  return {
+    id: `pi_stub_${Date.now()}`,
+    client_secret: `cs_stub_${Date.now()}`,
+    amount
+  };
+};
+
+// Create payment intent for Stripe (or stub)
 router.post('/create-payment-intent', authenticateToken, async (req, res) => {
   try {
     const { orderId } = req.body;
 
-    // Find the order
-    const order = await Order.findOne({
-      _id: orderId,
-      customer: req.user._id
-    });
+    const order = await Order.findByPk(orderId);
+    if (!order) return res.status(404).json({ message: 'Order not found' });
+    if (order.userId !== req.user.id) return res.status(403).json({ message: 'Not authorized' });
+    if (order.paymentStatus !== 'pending') return res.status(400).json({ message: 'Order payment already processed' });
 
-    if (!order) {
-      return res.status(404).json({ message: 'Order not found' });
+    const amountCents = Math.round(parseFloat(order.total) * 100);
+
+    let paymentIntent;
+    if (stripeLib) {
+      paymentIntent = await stripeLib.paymentIntents.create({
+        amount: amountCents,
+        currency: 'pln',
+        metadata: { orderId: orderId, userId: req.user.id },
+        automatic_payment_methods: { enabled: true }
+      });
+    } else {
+      paymentIntent = await createStubPaymentIntent(amountCents);
     }
 
-    if (order.paymentStatus !== 'pending') {
-      return res.status(400).json({ message: 'Order payment already processed' });
+    // Update Payment record with provider transaction id if exists
+    const payment = await Payment.findOne({ where: { orderId: order.id } });
+    if (payment) {
+      await payment.update({ transactionId: paymentIntent.id, providerResponse: { client_secret: paymentIntent.client_secret || null } });
     }
 
-    // Create payment intent
-    const paymentIntent = await stripe.paymentIntents.create({
-      amount: Math.round(order.totalAmount * 100), // Convert to cents
-      currency: 'pln', // Polish Złoty
-      metadata: {
-        orderId: order._id.toString(),
-        customerId: req.user._id.toString()
-      },
-      automatic_payment_methods: {
-        enabled: true,
-      },
-    });
-
-    res.json({
-      clientSecret: paymentIntent.client_secret,
-      paymentIntentId: paymentIntent.id
-    });
+    res.json({ clientSecret: paymentIntent.client_secret, paymentIntentId: paymentIntent.id });
   } catch (error) {
     console.error('Payment intent creation error:', error);
     res.status(500).json({ message: 'Failed to create payment intent' });
   }
 });
 
-// Confirm payment
+// Confirm payment (Stripe or stub)
 router.post('/confirm-payment', authenticateToken, async (req, res) => {
   try {
     const { paymentIntentId, orderId } = req.body;
 
-    // Verify payment with Stripe
-    const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+    const order = await Order.findByPk(orderId);
+    if (!order) return res.status(404).json({ message: 'Order not found' });
+    if (order.userId !== req.user.id) return res.status(403).json({ message: 'Not authorized' });
 
-    if (paymentIntent.status !== 'succeeded') {
-      return res.status(400).json({ 
-        message: 'Payment not successful',
-        status: paymentIntent.status 
-      });
+    let status = 'succeeded';
+    if (stripeLib) {
+      const pi = await stripeLib.paymentIntents.retrieve(paymentIntentId);
+      status = pi.status;
     }
 
-    // Update order payment status
-    const order = await Order.findOneAndUpdate(
-      { 
-        _id: orderId,
-        customer: req.user._id 
-      },
-      {
-        paymentStatus: 'paid',
-        status: 'confirmed',
-        'paymentDetails.transactionId': paymentIntentId,
-        'paymentDetails.paymentProvider': 'stripe',
-        'paymentDetails.paidAt': new Date()
-      },
-      { new: true }
-    );
-
-    if (!order) {
-      return res.status(404).json({ message: 'Order not found' });
+    if (status !== 'succeeded') {
+      return res.status(400).json({ message: 'Payment not successful', status });
     }
 
-    res.json({
-      message: 'Payment confirmed successfully',
-      order
-    });
+    // Mark payment and order as paid
+    const payment = await Payment.findOne({ where: { orderId: order.id } });
+    if (payment) {
+      await payment.update({ status: 'completed', transactionId: paymentIntentId, providerTransactionId: paymentIntentId });
+    }
+
+    await order.update({ paymentStatus: 'paid', status: 'confirmed' });
+
+    res.json({ message: 'Payment confirmed successfully', order });
   } catch (error) {
     console.error('Payment confirmation error:', error);
     res.status(500).json({ message: 'Failed to confirm payment' });
   }
 });
 
-// PayU integration for Polish market
+// PayU create-order (simulated) - creates provider info and returns redirect URI
 router.post('/payu/create-order', authenticateToken, async (req, res) => {
   try {
     const { orderId } = req.body;
+    const order = await Order.findByPk(orderId, { include: [] });
+    if (!order) return res.status(404).json({ message: 'Order not found' });
+    if (order.userId !== req.user.id) return res.status(403).json({ message: 'Not authorized' });
+    if (order.paymentStatus !== 'pending') return res.status(400).json({ message: 'Order payment already processed' });
 
-    // Find the order
-    const order = await Order.findOne({
-      _id: orderId,
-      customer: req.user._id
-    }).populate('customer');
+    // Simulate PayU response
+    const payuOrderId = `PAYU_${Date.now()}`;
+    const redirectUri = `https://secure.payu.com/pay/?token=simulated_${payuOrderId}`;
 
-    if (!order) {
-      return res.status(404).json({ message: 'Order not found' });
+    // Update Payment with providerTransactionId
+    const payment = await Payment.findOne({ where: { orderId: order.id } });
+    if (payment) {
+      await payment.update({ providerTransactionId: payuOrderId, providerResponse: { redirectUri }, method: 'payu' });
     }
 
-    if (order.paymentStatus !== 'pending') {
-      return res.status(400).json({ message: 'Order payment already processed' });
-    }
-
-    // PayU order data
-    const payuOrderData = {
-      notifyUrl: `${req.protocol}://${req.get('host')}/api/payments/payu/notify`,
-      customerIp: req.ip,
-      merchantPosId: process.env.PAYU_CLIENT_ID,
-      description: `Flower order ${order.orderNumber}`,
-      currencyCode: 'PLN',
-      totalAmount: Math.round(order.totalAmount * 100), // PayU expects amount in grosze
-      buyer: {
-        email: order.customer.email,
-        phone: order.customer.phone || order.shippingAddress.phone,
-        firstName: order.customer.firstName,
-        lastName: order.customer.lastName
-      },
-      products: [{
-        name: `Flower order ${order.orderNumber}`,
-        unitPrice: Math.round(order.totalAmount * 100),
-        quantity: 1
-      }]
-    };
-
-    // This is a simplified example - in production, you'd make actual API calls to PayU
-    // For now, we'll simulate the response
-    const payuResponse = {
-      status: {
-        statusCode: 'SUCCESS'
-      },
-      redirectUri: `https://secure.payu.com/pay/?token=example_token_${order._id}`,
-      orderId: `PAYU_${Date.now()}`
-    };
-
-    res.json({
-      redirectUri: payuResponse.redirectUri,
-      payuOrderId: payuResponse.orderId
-    });
+    res.json({ redirectUri, payuOrderId });
   } catch (error) {
     console.error('PayU order creation error:', error);
     res.status(500).json({ message: 'Failed to create PayU order' });
   }
 });
 
-// PayU notification webhook
+// PayU notification webhook (simulated) - accepts provider payload and updates payment
 router.post('/payu/notify', async (req, res) => {
   try {
-    // This would handle PayU payment notifications
-    // In production, you'd verify the notification signature
-    const { order } = req.body;
-    
-    if (order && order.status === 'COMPLETED') {
-      // Find and update the order
-      const dbOrder = await Order.findOne({
-        'paymentDetails.transactionId': order.orderId
-      });
+    const { orderId, status } = req.body; // simulated
+    if (!orderId) return res.status(400).send('Missing orderId');
 
-      if (dbOrder) {
-        dbOrder.paymentStatus = 'paid';
-        dbOrder.status = 'confirmed';
-        dbOrder.paymentDetails.paidAt = new Date();
-        await dbOrder.save();
-      }
+    const payment = await Payment.findOne({ where: { providerTransactionId: orderId } });
+    if (!payment) return res.status(404).send('Payment not found');
+
+    if (status === 'COMPLETED') {
+      await payment.update({ status: 'completed' });
+      const order = await Order.findByPk(payment.orderId);
+      if (order) await order.update({ paymentStatus: 'paid', status: 'confirmed' });
     }
 
     res.status(200).send('OK');
@@ -182,27 +135,9 @@ router.post('/payu/notify', async (req, res) => {
 // Get payment methods available
 router.get('/methods', authenticateToken, (req, res) => {
   const methods = [
-    {
-      id: 'card',
-      name: 'Credit/Debit Card',
-      description: 'Pay with Visa, Mastercard, or other cards',
-      provider: 'stripe',
-      available: true
-    },
-    {
-      id: 'payu',
-      name: 'PayU',
-      description: 'Popular payment method in Poland',
-      provider: 'payu',
-      available: true
-    },
-    {
-      id: 'transfer',
-      name: 'Bank Transfer',
-      description: 'Direct bank transfer',
-      provider: 'manual',
-      available: true
-    }
+    { id: 'card', name: 'Credit/Debit Card', description: 'Pay with Visa, Mastercard, or other cards', provider: 'stripe', available: true },
+    { id: 'payu', name: 'PayU', description: 'Popular payment method in Poland', provider: 'payu', available: true },
+    { id: 'transfer', name: 'Bank Transfer', description: 'Direct bank transfer', provider: 'manual', available: true }
   ];
 
   res.json(methods);
@@ -211,12 +146,10 @@ router.get('/methods', authenticateToken, (req, res) => {
 // Get payment history for user
 router.get('/history', authenticateToken, async (req, res) => {
   try {
-    const payments = await Order.find({
-      customer: req.user._id,
-      paymentStatus: { $in: ['paid', 'failed', 'refunded'] }
-    })
-    .select('orderNumber totalAmount paymentStatus paymentMethod paymentDetails createdAt')
-    .sort({ 'paymentDetails.paidAt': -1 });
+    const payments = await Payment.findAll({
+      where: { userId: req.user.id },
+      order: [['createdAt', 'DESC']]
+    });
 
     res.json(payments);
   } catch (error) {

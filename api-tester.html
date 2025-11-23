@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GreenLife API Tester</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ccc; }
+        .success { color: green; }
+        .error { color: red; }
+        button { padding: 10px 15px; margin: 5px; cursor: pointer; }
+        .result { margin-top: 10px; padding: 10px; background: #f5f5f5; white-space: pre-wrap; }
+    </style>
+</head>
+<body>
+    <h1>🌸 GreenLife API Tester</h1>
+    
+    <div class="test-section">
+        <h2>Server Health Check</h2>
+        <button onclick="testHealth()">Test Server Health</button>
+        <div id="health-result" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>User Authentication Tests</h2>
+        <button onclick="testLogin('wholesaler@test.com', 'password123', 'Wholesaler')">Test Wholesaler Login</button>
+        <button onclick="testLogin('florist@test.com', 'password123', 'Florist')">Test Florist Login</button>
+        <button onclick="testLogin('admin@test.com', 'admin123', 'Admin')">Test Admin Login</button>
+        <div id="login-result" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Flowers API Test</h2>
+        <button onclick="testFlowers()">Test Flowers Endpoint</button>
+        <button onclick="testFlowersWithAuth()">Test Flowers with Auth</button>
+        <div id="flowers-result" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Orders API Test</h2>
+        <button onclick="testCreateOrder()">Test Create Order</button>
+        <div id="orders-result" class="result"></div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:3001/api';
+        let currentToken = null;
+        let currentUser = null;
+
+        async function testHealth() {
+            const result = document.getElementById('health-result');
+            try {
+                const response = await fetch('http://localhost:3001/');
+                const data = await response.json();
+                result.innerHTML = `✅ Server Health: OK\n${JSON.stringify(data, null, 2)}`;
+                result.className = 'result success';
+            } catch (error) {
+                result.innerHTML = `❌ Server Health: Failed\n${error.message}`;
+                result.className = 'result error';
+            }
+        }
+
+        async function testLogin(email, password, userType) {
+            const result = document.getElementById('login-result');
+            try {
+                const response = await fetch(`${API_BASE}/auth/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ email, password })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                currentToken = data.token;
+                currentUser = data.user;
+                
+                result.innerHTML = `✅ ${userType} Login: SUCCESS
+Token: ${data.token ? 'Generated' : 'Missing'}
+User Type: ${data.user?.userType || 'Unknown'}
+Business: ${data.user?.businessName || 'N/A'}
+Email: ${data.user?.email || 'N/A'}`;
+                result.className = 'result success';
+            } catch (error) {
+                result.innerHTML = `❌ ${userType} Login: FAILED\n${error.message}`;
+                result.className = 'result error';
+            }
+        }
+
+        async function testFlowers() {
+            const result = document.getElementById('flowers-result');
+            try {
+                const response = await fetch(`${API_BASE}/flowers`);
+                const data = await response.json();
+                
+                result.innerHTML = `✅ Flowers API: SUCCESS
+Status: ${response.status}
+Flowers Count: ${data.flowers?.length || 0}
+Sample: ${data.flowers?.[0]?.name || 'None'}`;
+                result.className = 'result success';
+            } catch (error) {
+                result.innerHTML = `❌ Flowers API: FAILED\n${error.message}`;
+                result.className = 'result error';
+            }
+        }
+
+        async function testFlowersWithAuth() {
+            const result = document.getElementById('flowers-result');
+            if (!currentToken) {
+                result.innerHTML = '❌ Please login first to test authenticated requests';
+                result.className = 'result error';
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/flowers`, {
+                    headers: {
+                        'Authorization': `Bearer ${currentToken}`
+                    }
+                });
+                const data = await response.json();
+                
+                result.innerHTML = `✅ Flowers API (Authenticated): SUCCESS
+User: ${currentUser?.userType || 'Unknown'}
+Status: ${response.status}
+Flowers Count: ${data.flowers?.length || 0}
+First Flower Price: ${data.flowers?.[0]?.price || 'N/A'}`;
+                result.className = 'result success';
+            } catch (error) {
+                result.innerHTML = `❌ Flowers API (Auth): FAILED\n${error.message}`;
+                result.className = 'result error';
+            }
+        }
+
+        async function testCreateOrder() {
+            const result = document.getElementById('orders-result');
+            if (!currentToken) {
+                result.innerHTML = '❌ Please login first to create orders';
+                result.className = 'result error';
+                return;
+            }
+
+            try {
+                const orderData = {
+                    items: [
+                        { flowerId: '507f1f77bcf86cd799439011', quantity: 2, price: 15.99 }
+                    ],
+                    totalAmount: 31.98,
+                    deliveryAddress: {
+                        street: '123 Test Street',
+                        city: 'Test City',
+                        postalCode: '12345',
+                        country: 'Test Country'
+                    }
+                };
+
+                const response = await fetch(`${API_BASE}/orders`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${currentToken}`
+                    },
+                    body: JSON.stringify(orderData)
+                });
+
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${JSON.stringify(data)}`);
+                }
+                
+                result.innerHTML = `✅ Create Order: SUCCESS
+Order ID: ${data.order?.id || 'N/A'}
+Status: ${data.order?.status || 'N/A'}
+Total: $${data.order?.totalAmount || 'N/A'}`;
+                result.className = 'result success';
+            } catch (error) {
+                result.innerHTML = `❌ Create Order: FAILED\n${error.message}`;
+                result.className = 'result error';
+            }
+        }
+
+        // Auto-test server health on page load
+        window.onload = function() {
+            testHealth();
+        };
+    </script>
+</body>
+</html>

@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="300" height="300" viewBox="0 0 300 300" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+        <radialGradient id="flowerGradient" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" style="stop-color:#9370DB;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#9370DB88;stop-opacity:1" />
+        </radialGradient>
+        <linearGradient id="stemGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" style="stop-color:#228B22;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#006400;stop-opacity:1" />
+        </linearGradient>
+    </defs>
+    
+    <!-- Background -->
+    <rect width="300" height="300" fill="#f8f9fa"/>
+    
+    <!-- Stem -->
+    <rect x="145" y="180" width="10" height="100" fill="url(#stemGradient)" rx="5"/>
+    
+    <!-- Leaves -->
+    <ellipse cx="135" cy="200" rx="15" ry="8" fill="#228B22" transform="rotate(-30 135 200)"/>
+    <ellipse cx="165" cy="210" rx="15" ry="8" fill="#228B22" transform="rotate(30 165 210)"/>
+    
+    <!-- Flower petals (carnation style) -->
+    <g transform="translate(150,120)">
+        <!-- Outer petals -->
+        <circle cx="0" cy="0" r="45" fill="url(#flowerGradient)" opacity="0.8"/>
+        <circle cx="0" cy="0" r="35" fill="url(#flowerGradient)" opacity="0.9"/>
+        
+        <!-- Inner ruffled effect -->
+        <path d="M-25,0 Q-15,-10 0,0 Q15,-10 25,0 Q15,10 0,0 Q-15,10 -25,0" fill="#9370DB" opacity="0.7"/>
+        <path d="M0,-25 Q10,-15 0,0 Q10,15 0,25 Q-10,15 0,0 Q-10,-15 0,-25" fill="#9370DB" opacity="0.7"/>
+        
+        <!-- Center -->
+        <circle cx="0" cy="0" r="8" fill="#4A5D23"/>
+    </g>
+    
+    <!-- Text label -->
+    <rect x="0" y="270" width="300" height="30" fill="rgba(255,255,255,0.9)"/>
+    <text x="150" y="290" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#333">
+        Purple Carnations
+    </text>
+</svg>

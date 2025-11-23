@@ -2,30 +2,273 @@ const express = require('express');
 const router = express.Router();
 const { Flower, Category } = require('../models/mongo');
 const { authenticateToken, authorizeRoles } = require('../middleware/auth');
+const { categories, flowers: carnationFlowers } = require('../data/carnationCatalog');
 
-// Get all flowers with user-type specific pricing
+// Get all flowers with pagination and category filtering
 router.get('/', async (req, res) => {
   try {
-    // Complete catalog with organized image paths
-    const mockFlowers = [
-      // CARNATIONS
-      {
-        _id: '507f1f77bcf86cd799439011',
-        name: 'Red Carnation',
-        category: 'carnations',
-        variety: 'Standard',
-        color: 'red',
-        description: 'Classic red carnations perfect for romantic bouquets and special occasions',
+    // Extract query parameters
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const category = req.query.category;
+    const search = req.query.search;
+    const skip = (page - 1) * limit;
+
+    // Use our expanded carnation catalog
+    let allFlowers = carnationFlowers.map(flower => ({
+      _id: flower.id,
+      id: flower.id,
+      name: flower.name,
+      category: flower.category,
+      categoryId: flower.categoryId,
+      description: flower.description,
+      color: flower.color,
+      colors: flower.colors,
+      images: [{ url: flower.image, isPrimary: true, alt: flower.name }],
+      availability: flower.availability,
+      pricing: flower.pricing,
+      specifications: flower.specifications,
+      isNew: flower.isNew || false,
+      isActive: true,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }));
+
+    // Apply category filter
+    if (category) {
+      allFlowers = allFlowers.filter(flower => 
+        flower.categoryId === category || 
+        flower.category.toLowerCase().includes(category.toLowerCase())
+      );
+    }
+
+    // Apply search filter
+    if (search) {
+      const searchLower = search.toLowerCase();
+      allFlowers = allFlowers.filter(flower =>
+        flower.name.toLowerCase().includes(searchLower) ||
+        flower.description.toLowerCase().includes(searchLower) ||
+        flower.color.toLowerCase().includes(searchLower) ||
+        flower.category.toLowerCase().includes(searchLower)
+      );
+    }
+
+    // Calculate pagination
+    const totalFlowers = allFlowers.length;
+    const totalPages = Math.ceil(totalFlowers / limit);
+    const paginatedFlowers = allFlowers.slice(skip, skip + limit);
+
+    // Apply user-specific pricing if authenticated
+    if (req.user) {
+      const userType = req.user.userType;
+      processedFlowers = processedFlowers.map(flower => {
+        const flowerCopy = { ...flower };
+        
+        if (userType === 'wholesaler') {
+          // Wholesaler sees box pricing
+          flowerCopy.pricing = {
+            pricePerBox: flower.pricing.wholesaler.pricePerBox,
+            boxSize: flower.pricing.wholesaler.boxSize,
+            pricePerStem: flower.pricing.wholesaler.pricePerStem,
+            minQuantity: flower.pricing.wholesaler.boxSize,
+            displayUnit: 'box'
+          };
+        } else {
+          // Florist and others see per-stem pricing
+          flowerCopy.pricing = {
+            pricePerStem: flower.pricing.florist.pricePerStem,
+            minQuantity: flower.pricing.florist.minQuantity,
+            displayUnit: 'stem'
+          };
+        }
+        
+        return flowerCopy;
+      });
+    } else {
+      // Default to florist pricing for unauthenticated users
+      processedFlowers = processedFlowers.map(flower => {
+        const flowerCopy = { ...flower };
+        flowerCopy.pricing = {
+          pricePerStem: flower.pricing.florist.pricePerStem,
+          minQuantity: flower.pricing.florist.minQuantity,
+          displayUnit: 'stem'
+        };
+        return flowerCopy;
+      });
+    }
+
+    // Return paginated response
+    res.json({
+      success: true,
+      flowers: processedFlowers,
+      pagination: {
+        currentPage: page,
+        totalPages: totalPages,
+        totalItems: totalFlowers,
+        itemsPerPage: limit,
+        hasNextPage: page < totalPages,
+        hasPrevPage: page > 1
+      },
+      categories: categories,
+      filters: {
+        category: category || null,
+        search: search || null
+      }
+    });
+
+  } catch (error) {
+    console.error('Error fetching flowers:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch flowers',
+      error: error.message
+    });
+  }
+});
+
+// Get categories
+router.get('/categories', async (req, res) => {
+  try {
+    res.json({
+      success: true,
+      categories: categories
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch categories',
+      error: error.message
+    });
+  }
+});
+
+// Get flower by ID
+router.get('/:id', async (req, res) => {
+  try {
+    const flowerId = req.params.id;
+    
+    // Find flower in our catalog
+    const flower = carnationFlowers.find(f => f.id === flowerId);
+    
+    if (!flower) {
+      return res.status(404).json({
+        success: false,
+        message: 'Flower not found'
+      });
+    }
+
+    // Format flower data
+    const formattedFlower = {
+      _id: flower.id,
+      id: flower.id,
+      name: flower.name,
+      category: flower.category,
+      categoryId: flower.categoryId,
+      description: flower.description,
+      color: flower.color,
+      colors: flower.colors,
+      images: [{ url: flower.image, isPrimary: true, alt: flower.name }],
+      availability: flower.availability,
+      specifications: flower.specifications,
+      isNew: flower.isNew || false,
+      isActive: true
+    };
+
+    // Apply user-specific pricing
+    if (req.user && req.user.userType === 'wholesaler') {
+      formattedFlower.pricing = flower.pricing.wholesaler;
+    } else {
+      formattedFlower.pricing = flower.pricing.florist;
+    }
+
+    res.json({
+      success: true,
+      flower: formattedFlower
+    });
+
+  } catch (error) {
+    console.error('Error fetching flower:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch flower',
+      error: error.message
+    });
+  }
+});
+
+// Get flowers by category
+router.get('/category/:categoryId', async (req, res) => {
+  try {
+    const { categoryId } = req.params;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    // Filter flowers by category
+    let categoryFlowers = carnationFlowers.filter(flower => 
+      flower.categoryId === categoryId
+    );
+
+    // Apply pagination
+    const totalFlowers = categoryFlowers.length;
+    const totalPages = Math.ceil(totalFlowers / limit);
+    const paginatedFlowers = categoryFlowers.slice(skip, skip + limit);
+
+    // Format response
+    const processedFlowers = paginatedFlowers.map(flower => ({
+      _id: flower.id,
+      id: flower.id,
+      name: flower.name,
+      category: flower.category,
+      categoryId: flower.categoryId,
+      description: flower.description,
+      color: flower.color,
+      colors: flower.colors,
+      images: [{ url: flower.image, isPrimary: true, alt: flower.name }],
+      availability: flower.availability,
+      pricing: req.user && req.user.userType === 'wholesaler' 
+        ? flower.pricing.wholesaler 
+        : flower.pricing.florist,
+      specifications: flower.specifications,
+      isNew: flower.isNew || false,
+      isActive: true
+    }));
+
+    res.json({
+      success: true,
+      flowers: processedFlowers,
+      category: categories.find(c => c.id === categoryId),
+      pagination: {
+        currentPage: page,
+        totalPages: totalPages,
+        totalItems: totalFlowers,
+        itemsPerPage: limit,
+        hasNextPage: page < totalPages,
+        hasPrevPage: page > 1
+      }
+    });
+
+  } catch (error) {
+    console.error('Error fetching category flowers:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch category flowers',
+      error: error.message
+    });
+  }
+});
+
+module.exports = router;
         images: [
           {
-            url: '/images/flowers/red-carnation.jpg',
-            alt: 'Red Carnation',
+            url: '/images/flowers/carnations/red-carnations.svg',
+            alt: 'Red Carnations',
             isPrimary: true
           }
         ],
         pricing: {
           boxSize: 100,
-          pricePerBox: 25.00,
+          pricePerBox: 35.00,
           pricePerStem: 0.35,
           minQuantity: 1,
           boxEquivalent: 100
@@ -44,26 +287,27 @@ router.get('/', async (req, res) => {
         },
         tags: ['carnation', 'red', 'classic', 'romantic'],
         isActive: true,
+        isFeatured: true,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       },
       {
         _id: '507f1f77bcf86cd799439013',
-        name: 'Pink Carnation',
+        name: 'Pink Carnations',
         category: 'carnations',
         variety: 'Standard',
         color: 'pink',
         description: 'Soft pink carnations ideal for gentle expressions of love and appreciation',
         images: [
           {
-            url: '/images/flowers/pink-carnation.jpg',
-            alt: 'Pink Carnation',
+            url: '/images/flowers/carnations/pink-carnations.svg',
+            alt: 'Pink Carnations',
             isPrimary: true
           }
         ],
         pricing: {
           boxSize: 100,
-          pricePerBox: 24.00,
+          pricePerBox: 33.00,
           pricePerStem: 0.33,
           minQuantity: 1,
           boxEquivalent: 100
@@ -82,41 +326,42 @@ router.get('/', async (req, res) => {
         },
         tags: ['carnation', 'pink', 'soft', 'feminine'],
         isActive: true,
+        isFeatured: true,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       },
       {
         _id: '507f1f77bcf86cd799439014',
-        name: 'White Carnation',
+        name: 'White Carnations',
         category: 'carnations',
         variety: 'Standard',
         color: 'white',
-        description: 'Pure white carnations symbolizing pure love and good luck',
+        description: 'Pure white carnations perfect for weddings and elegant arrangements',
         images: [
           {
-            url: '/images/flowers/white-carnation.jpg',
-            alt: 'White Carnation',
+            url: '/images/flowers/carnations/white-carnations.svg',
+            alt: 'White Carnations',
             isPrimary: true
           }
         ],
         pricing: {
           boxSize: 100,
-          pricePerBox: 23.00,
+          pricePerBox: 32.00,
           pricePerStem: 0.32,
           minQuantity: 1,
           boxEquivalent: 100
         },
         availability: {
           inStock: true,
-          stockQuantity: 400,
+          stockQuantity: 600,
           seasonal: false,
           availableMonths: [1,2,3,4,5,6,7,8,9,10,11,12]
         },
         specifications: {
           stemLength: '50-60cm',
           headSize: '4-5cm',
-          vaseLife: '8-12 days',
-          origin: 'Netherlands'
+          vaseLife: '7-10 days',
+          origin: 'Colombia'
         },
         tags: ['carnation', 'white', 'pure', 'wedding'],
         isActive: true,
@@ -125,28 +370,28 @@ router.get('/', async (req, res) => {
       },
       {
         _id: '507f1f77bcf86cd799439015',
-        name: 'Yellow Carnation',
+        name: 'Yellow Carnations',
         category: 'carnations',
         variety: 'Standard',
         color: 'yellow',
-        description: 'Bright yellow carnations bringing sunshine and joy to any arrangement',
+        description: 'Bright yellow carnations that bring sunshine and joy to any arrangement',
         images: [
           {
-            url: '/images/flowers/yellow-carnation.jpg',
-            alt: 'Yellow Carnation',
+            url: '/images/flowers/carnations/yellow-carnations.svg',
+            alt: 'Yellow Carnations',
             isPrimary: true
           }
         ],
         pricing: {
           boxSize: 100,
-          pricePerBox: 26.00,
-          pricePerStem: 0.36,
+          pricePerBox: 34.00,
+          pricePerStem: 0.34,
           minQuantity: 1,
           boxEquivalent: 100
         },
         availability: {
           inStock: true,
-          stockQuantity: 350,
+          stockQuantity: 400,
           seasonal: false,
           availableMonths: [1,2,3,4,5,6,7,8,9,10,11,12]
         },
@@ -163,21 +408,21 @@ router.get('/', async (req, res) => {
       },
       {
         _id: '507f1f77bcf86cd799439016',
-        name: 'Purple Carnation',
+        name: 'Purple Carnations',
         category: 'carnations',
         variety: 'Standard',
         color: 'purple',
-        description: 'Rich purple carnations for sophisticated and elegant arrangements',
+        description: 'Unique purple carnations for sophisticated and distinctive floral designs',
         images: [
           {
-            url: '/images/flowers/purple-carnation.jpg',
-            alt: 'Purple Carnation',
+            url: '/images/flowers/carnations/purple-carnations.svg',
+            alt: 'Purple Carnations',
             isPrimary: true
           }
         ],
         pricing: {
           boxSize: 100,
-          pricePerBox: 28.00,
+          pricePerBox: 38.00,
           pricePerStem: 0.38,
           minQuantity: 1,
           boxEquivalent: 100
@@ -192,32 +437,225 @@ router.get('/', async (req, res) => {
           stemLength: '50-60cm',
           headSize: '4-5cm',
           vaseLife: '7-10 days',
-          origin: 'Ecuador'
+          origin: 'Colombia'
         },
-        tags: ['carnation', 'purple', 'elegant', 'sophisticated'],
+        tags: ['carnation', 'purple', 'unique', 'sophisticated'],
         isActive: true,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       },
-      // SPRAY CARNATIONS
       {
-        _id: '507f1f77bcf86cd799439012',
-        name: 'White Spray Carnation',
-        category: 'spray-carnations',
-        variety: 'Spray',
-        color: 'white',
-        description: 'Elegant white spray carnations perfect for wedding arrangements and bouquets',
+        _id: '507f1f77bcf86cd799439017',
+        name: 'Standard Carnations',
+        category: 'carnations',
+        variety: 'Standard',
+        color: 'various',
+        description: 'Premium large-headed carnations with full, ruffled petals. Perfect for bouquets and arrangements.',
         images: [
           {
-            url: '/images/flowers/white-spray-carnation.jpg',
-            alt: 'White Spray Carnation',
+            url: '/images/flowers/carnations/standard-carnations.svg',
+            alt: 'Standard Carnations',
             isPrimary: true
           }
         ],
         pricing: {
           boxSize: 100,
-          pricePerBox: 30.00,
+          pricePerBox: 45.00,
           pricePerStem: 0.45,
+          minQuantity: 1,
+          boxEquivalent: 100
+        },
+        availability: {
+          inStock: true,
+          stockQuantity: 400,
+          seasonal: false,
+          availableMonths: [1,2,3,4,5,6,7,8,9,10,11,12]
+        },
+        specifications: {
+          stemLength: '50-60cm',
+          headSize: '5-6cm',
+          vaseLife: '7-10 days',
+          origin: 'Colombia'
+        },
+        tags: ['carnation', 'standard', 'premium', 'large'],
+        isActive: true,
+        isFeatured: true,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      },
+      {
+        _id: '507f1f77bcf86cd799439018',
+        name: 'Mini Carnations',
+        category: 'carnations',
+        variety: 'Mini',
+        color: 'various',
+        description: 'Delicate small carnations perfect for corsages and boutonnières.',
+        images: [
+          {
+            url: '/images/flowers/carnations/mini-carnations.svg',
+            alt: 'Mini Carnations',
+            isPrimary: true
+          }
+        ],
+        pricing: {
+          boxSize: 100,
+          pricePerBox: 28.00,
+          pricePerStem: 0.28,
+          minQuantity: 1,
+          boxEquivalent: 100
+        },
+        availability: {
+          inStock: true,
+          stockQuantity: 350,
+          seasonal: false,
+          availableMonths: [1,2,3,4,5,6,7,8,9,10,11,12]
+        },
+        specifications: {
+          stemLength: '35-45cm',
+          headSize: '2-3cm',
+          vaseLife: '7-10 days',
+          origin: 'Colombia'
+        },
+        tags: ['carnation', 'mini', 'small', 'delicate'],
+        isActive: true,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      },
+      {
+        _id: '507f1f77bcf86cd799439019',
+        name: 'Green Carnations',
+        category: 'carnations',
+        variety: 'Standard',
+        color: 'green',
+        description: 'Unique green carnations for contemporary and eco-themed arrangements.',
+        images: [
+          {
+            url: '/images/flowers/carnations/green-carnations.svg',
+            alt: 'Green Carnations',
+            isPrimary: true
+          }
+        ],
+        pricing: {
+          boxSize: 100,
+          pricePerBox: 52.00,
+          pricePerStem: 0.52,
+          minQuantity: 1,
+          boxEquivalent: 100
+        },
+        availability: {
+          inStock: true,
+          stockQuantity: 200,
+          seasonal: false,
+          availableMonths: [1,2,3,4,5,6,7,8,9,10,11,12]
+        },
+        specifications: {
+          stemLength: '50-60cm',
+          headSize: '4-5cm',
+          vaseLife: '7-10 days',
+          origin: 'Netherlands'
+        },
+        tags: ['carnation', 'green', 'unique', 'contemporary'],
+        isActive: true,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      },
+      {
+        _id: '507f1f77bcf86cd799439020',
+        name: 'Orange Carnations',
+        category: 'carnations',
+        variety: 'Standard',
+        color: 'orange',
+        description: 'Vibrant orange carnations for energetic and warm arrangements.',
+        images: [
+          {
+            url: '/images/flowers/carnations/orange-carnations.svg',
+            alt: 'Orange Carnations',
+            isPrimary: true
+          }
+        ],
+        pricing: {
+          boxSize: 100,
+          pricePerBox: 46.00,
+          pricePerStem: 0.46,
+          minQuantity: 1,
+          boxEquivalent: 100
+        },
+        availability: {
+          inStock: true,
+          stockQuantity: 280,
+          seasonal: false,
+          availableMonths: [1,2,3,4,5,6,7,8,9,10,11,12]
+        },
+        specifications: {
+          stemLength: '50-60cm',
+          headSize: '4-5cm',
+          vaseLife: '7-10 days',
+          origin: 'Colombia'
+        },
+        tags: ['carnation', 'orange', 'vibrant', 'warm'],
+        isActive: true,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      },
+      {
+        _id: '507f1f77bcf86cd799439027',
+        name: 'Bicolor Carnations',
+        category: 'carnations',
+        variety: 'Standard',
+        color: 'bicolor',
+        description: 'Stunning two-toned carnations with unique color combinations and patterns.',
+        images: [
+          {
+            url: '/images/flowers/carnations/bicolor-carnations.svg',
+            alt: 'Bicolor Carnations',
+            isPrimary: true
+          }
+        ],
+        pricing: {
+          boxSize: 100,
+          pricePerBox: 55.00,
+          pricePerStem: 0.55,
+          minQuantity: 1,
+          boxEquivalent: 100
+        },
+        availability: {
+          inStock: true,
+          stockQuantity: 150,
+          seasonal: false,
+          availableMonths: [1,2,3,4,5,6,7,8,9,10,11,12]
+        },
+        specifications: {
+          stemLength: '50-60cm',
+          headSize: '4-5cm',
+          vaseLife: '7-10 days',
+          origin: 'Netherlands'
+        },
+        tags: ['carnation', 'bicolor', 'unique', 'patterns'],
+        isActive: true,
+        isFeatured: true,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      },
+
+      // SPRAY CARNATIONS
+      {
+        _id: '507f1f77bcf86cd799439021',
+        name: 'Spray Carnations',
+        category: 'carnations',
+        variety: 'Spray',
+        color: 'mixed',
+        description: 'Multi-headed carnations with smaller blooms. Excellent for filler and texture.',
+        images: [
+          {
+            url: '/images/flowers/carnations/spray-carnations.svg',
+            alt: 'Spray Carnations',
+            isPrimary: true
+          }
+        ],
+        pricing: {
+          boxSize: 100,
+          pricePerBox: 38.00,
+          pricePerStem: 0.38,
           minQuantity: 1,
           boxEquivalent: 100
         },
@@ -233,227 +671,14 @@ router.get('/', async (req, res) => {
           vaseLife: '8-12 days',
           origin: 'Netherlands'
         },
-        tags: ['spray-carnation', 'white', 'wedding', 'delicate'],
+        tags: ['spray-carnation', 'multi-headed', 'texture', 'filler'],
         isActive: true,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      },
-      {
-        _id: '507f1f77bcf86cd799439017',
-        name: 'Pink Spray Carnation',
-        category: 'spray-carnations',
-        variety: 'Spray',
-        color: 'pink',
-        description: 'Delicate pink spray carnations with multiple blooms per stem',
-        images: [
-          {
-            url: '/images/flowers/pink-spray-carnation.jpg',
-            alt: 'Pink Spray Carnation',
-            isPrimary: true
-          }
-        ],
-        pricing: {
-          boxSize: 100,
-          pricePerBox: 32.00,
-          pricePerStem: 0.47,
-          minQuantity: 1,
-          boxEquivalent: 100
-        },
-        availability: {
-          inStock: true,
-          stockQuantity: 280,
-          seasonal: false,
-          availableMonths: [1,2,3,4,5,6,7,8,9,10,11,12]
-        },
-        specifications: {
-          stemLength: '40-50cm',
-          headSize: '3-4cm',
-          vaseLife: '8-12 days',
-          origin: 'Netherlands'
-        },
-        tags: ['spray-carnation', 'pink', 'delicate', 'multi-bloom'],
-        isActive: true,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      },
-      {
-        _id: '507f1f77bcf86cd799439018',
-        name: 'Red Spray Carnation',
-        category: 'spray-carnations',
-        variety: 'Spray',
-        color: 'red',
-        description: 'Vibrant red spray carnations adding richness to floral displays',
-        images: [
-          {
-            url: '/images/flowers/red-spray-carnation.jpg',
-            alt: 'Red Spray Carnation',
-            isPrimary: true
-          }
-        ],
-        pricing: {
-          boxSize: 100,
-          pricePerBox: 33.00,
-          pricePerStem: 0.48,
-          minQuantity: 1,
-          boxEquivalent: 100
-        },
-        availability: {
-          inStock: true,
-          stockQuantity: 260,
-          seasonal: false,
-          availableMonths: [1,2,3,4,5,6,7,8,9,10,11,12]
-        },
-        specifications: {
-          stemLength: '40-50cm',
-          headSize: '3-4cm',
-          vaseLife: '8-12 days',
-          origin: 'Colombia'
-        },
-        tags: ['spray-carnation', 'red', 'vibrant', 'rich'],
-        isActive: true,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      },
-      {
-        _id: '507f1f77bcf86cd799439019',
-        name: 'Yellow Spray Carnation',
-        category: 'spray-carnations',
-        variety: 'Spray',
-        color: 'yellow',
-        description: 'Cheerful yellow spray carnations bringing brightness to arrangements',
-        images: [
-          {
-            url: '/images/flowers/yellow-spray-carnation.jpg',
-            alt: 'Yellow Spray Carnation',
-            isPrimary: true
-          }
-        ],
-        pricing: {
-          boxSize: 100,
-          pricePerBox: 31.00,
-          pricePerStem: 0.46,
-          minQuantity: 1,
-          boxEquivalent: 100
-        },
-        availability: {
-          inStock: true,
-          stockQuantity: 240,
-          seasonal: false,
-          availableMonths: [1,2,3,4,5,6,7,8,9,10,11,12]
-        },
-        specifications: {
-          stemLength: '40-50cm',
-          headSize: '3-4cm',
-          vaseLife: '8-12 days',
-          origin: 'Colombia'
-        },
-        tags: ['spray-carnation', 'yellow', 'cheerful', 'bright'],
-        isActive: true,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      },
-      {
-        _id: '507f1f77bcf86cd799439020',
-        name: 'Orange Spray Carnation',
-        category: 'spray-carnations',
-        variety: 'Spray',
-        color: 'orange',
-        description: 'Warm orange spray carnations perfect for autumn arrangements',
-        images: [
-          {
-            url: '/images/flowers/orange-spray-carnation.jpg',
-            alt: 'Orange Spray Carnation',
-            isPrimary: true
-          }
-        ],
-        pricing: {
-          boxSize: 100,
-          pricePerBox: 34.00,
-          pricePerStem: 0.49,
-          minQuantity: 1,
-          boxEquivalent: 100
-        },
-        availability: {
-          inStock: true,
-          stockQuantity: 200,
-          seasonal: true,
-          availableMonths: [9,10,11,12,1,2]
-        },
-        specifications: {
-          stemLength: '40-50cm',
-          headSize: '3-4cm',
-          vaseLife: '8-12 days',
-          origin: 'Netherlands'
-        },
-        tags: ['spray-carnation', 'orange', 'warm', 'autumn'],
-        isActive: true,
+        isFeatured: true,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       }
     ];
 
-    console.log('Returning mock flower data (MongoDB not connected)');
-    
-    res.json({
-      flowers: mockFlowers,
-      pagination: {
-        current: 1,
-        pages: 1,
-        total: mockFlowers.length,
-        limit: 20
-      }
-    });
-
-  } catch (error) {
-    console.error('Error fetching flowers:', error);
-    res.status(500).json({ message: 'Failed to fetch flowers' });
-  }
-});
-
-// Get single flower by ID
-router.get('/:id', async (req, res) => {
-  try {
-    const flower = await Flower.findOne({ 
-      _id: req.params.id, 
-      active: true 
-    });
-
-    if (!flower) {
-      return res.status(404).json({ message: 'Flower not found' });
-    }
-
-    res.json(flower);
-  } catch (error) {
-    console.error('Error fetching flower:', error);
-    res.status(500).json({ message: 'Failed to fetch flower' });
-  }
-});
-
-// Get flower pricing for user type
-router.get('/:id/pricing', authenticateToken, async (req, res) => {
-  try {
-    const flower = await Flower.findOne({ 
-      _id: req.params.id, 
-      active: true 
-    });
-
-    if (!flower) {
-      return res.status(404).json({ message: 'Flower not found' });
-    }
-
-    const pricing = flower.getPriceForUserType(req.user.userType);
-    res.json({ pricing });
-  } catch (error) {
-    console.error('Error fetching flower pricing:', error);
-    res.status(500).json({ message: 'Failed to fetch flower pricing' });
-  }
-});
-
-// Get featured flowers
-router.get('/featured/list', async (req, res) => {
-  try {
-    const { limit = 8 } = req.query;
-    
     // Featured flowers selection
     const featuredFlowers = [
       {
@@ -465,14 +690,14 @@ router.get('/featured/list', async (req, res) => {
         description: 'Classic red carnations perfect for romantic bouquets and special occasions',
         images: [
           {
-            url: '/images/flowers/red-carnation.jpg',
-            alt: 'Red Carnation',
+            url: '/images/flowers/carnations/red-carnation-1.svg',
+            alt: 'Red Carnation - Front view',
             isPrimary: true
           }
         ],
         pricing: {
           boxSize: 100,
-          pricePerBox: 25.00,
+          pricePerBox: 35.00,
           pricePerStem: 0.35,
           minQuantity: 1,
           boxEquivalent: 100
@@ -495,7 +720,7 @@ router.get('/featured/list', async (req, res) => {
         updatedAt: new Date().toISOString()
       },
       {
-        _id: '507f1f77bcf86cd799439012',
+        _id: '507f1f77bcf86cd799439021',
         name: 'White Spray Carnation',
         category: 'spray-carnations',
         variety: 'Spray',
@@ -503,14 +728,14 @@ router.get('/featured/list', async (req, res) => {
         description: 'Elegant white spray carnations perfect for wedding arrangements and bouquets',
         images: [
           {
-            url: '/images/flowers/white-spray-carnation.jpg',
-            alt: 'White Spray Carnation',
+            url: '/images/flowers/spray-carnations/white-spray-carnation-1.svg',
+            alt: 'White Spray Carnation - Front view',
             isPrimary: true
           }
         ],
         pricing: {
           boxSize: 100,
-          pricePerBox: 30.00,
+          pricePerBox: 45.00,
           pricePerStem: 0.45,
           minQuantity: 1,
           boxEquivalent: 100
@@ -541,14 +766,14 @@ router.get('/featured/list', async (req, res) => {
         description: 'Soft pink carnations ideal for gentle expressions of love and appreciation',
         images: [
           {
-            url: '/images/flowers/pink-carnation.jpg',
-            alt: 'Pink Carnation',
+            url: '/images/flowers/carnations/pink-carnation-1.svg',
+            alt: 'Pink Carnation - Front view',
             isPrimary: true
           }
         ],
         pricing: {
           boxSize: 100,
-          pricePerBox: 24.00,
+          pricePerBox: 33.00,
           pricePerStem: 0.33,
           minQuantity: 1,
           boxEquivalent: 100
@@ -572,126 +797,264 @@ router.get('/featured/list', async (req, res) => {
       }
     ];
 
-    console.log('Returning mock featured flowers');
-    res.json(featuredFlowers.slice(0, parseInt(limit)));
+    try {
+      // Try to get flowers from MongoDB
+      const flowers = await Flower.find({ isActive: true })
+        .populate('category')
+        .sort({ name: 1 });
+      
+      if (flowers.length > 0) {
+        console.log('✓ Using MongoDB data');
+        // Format response to match React frontend expectations
+        const response = {
+          flowers: flowers,
+          pagination: {
+            current: 1,
+            limit: 12,
+            total: flowers.length,
+            pages: Math.ceil(flowers.length / 12)
+          }
+        };
+        res.json(response);
+      } else {
+        throw new Error('No flowers found in MongoDB');
+      }
+    } catch (mongoError) {
+      console.log('⚠ MongoDB unavailable, using mock data');
+      // Format mock response to match React frontend expectations
+      const response = {
+        flowers: mockFlowers,
+        pagination: {
+          current: 1,
+          limit: 12,
+          total: mockFlowers.length,
+          pages: Math.ceil(mockFlowers.length / 12)
+        }
+      };
+      res.json(response);
+    }
+
   } catch (error) {
-    console.error('Error fetching featured flowers:', error);
-    res.status(500).json({ message: 'Failed to fetch featured flowers' });
+    console.error('Flowers API error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to fetch flowers',
+      error: error.message 
+    });
+  }
+});
+
+// Get featured flowers
+router.get('/featured', async (req, res) => {
+  try {
+    try {
+      // Try to get featured flowers from MongoDB
+      const flowers = await Flower.find({ isActive: true, isFeatured: true })
+        .populate('category')
+        .sort({ name: 1 });
+      
+      if (flowers.length > 0) {
+        console.log('✓ Using MongoDB featured data');
+        res.json({ success: true, data: flowers });
+      } else {
+        throw new Error('No featured flowers found in MongoDB');
+      }
+    } catch (mongoError) {
+      console.log('⚠ MongoDB unavailable for featured, using mock data');
+      // Mock featured flowers
+      const mockFeatured = [
+        {
+          _id: '507f1f77bcf86cd799439011',
+          name: 'Red Carnation',
+          category: 'carnations',
+          description: 'Classic red carnations perfect for romantic occasions',
+          images: [{ url: '/images/flowers/carnations/red-carnation-1.svg', alt: 'Red Carnation', isPrimary: true }],
+          pricing: { pricePerStem: 0.35, pricePerBox: 35.00 },
+          isActive: true
+        },
+        {
+          _id: '507f1f77bcf86cd799439021',
+          name: 'White Spray Carnation',
+          category: 'spray-carnations',
+          description: 'Elegant white spray carnations for weddings',
+          images: [{ url: '/images/flowers/spray-carnations/white-spray-carnation-1.svg', alt: 'White Spray Carnation', isPrimary: true }],
+          pricing: { pricePerStem: 0.45, pricePerBox: 45.00 },
+          isActive: true
+        },
+        {
+          _id: '507f1f77bcf86cd799439013',
+          name: 'Pink Carnation',
+          category: 'carnations',
+          description: 'Soft pink carnations for gentle expressions',
+          images: [{ url: '/images/flowers/carnations/pink-carnation-1.svg', alt: 'Pink Carnation', isPrimary: true }],
+          pricing: { pricePerStem: 0.33, pricePerBox: 33.00 },
+          isActive: true
+        }
+      ];
+      res.json({ success: true, data: mockFeatured });
+    }
+  } catch (error) {
+    console.error('Featured flowers API error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to fetch featured flowers',
+      error: error.message 
+    });
+  }
+});
+
+// Get flower by ID
+router.get('/:id', async (req, res) => {
+  try {
+    const flowerId = req.params.id;
+    
+    try {
+      // Try MongoDB first
+      const flower = await Flower.findById(flowerId).populate('category');
+      if (flower) {
+        console.log('✓ Using MongoDB flower data');
+        res.json({ success: true, data: flower });
+        return;
+      }
+    } catch (mongoError) {
+      console.log('⚠ MongoDB unavailable, searching mock data');
+    }
+
+    // Fallback to mock data
+    const mockFlowers = [
+      // Include the same mockFlowers array as above for single flower lookup
+      // (truncated for brevity - would include full array)
+    ];
+    
+    const flower = mockFlowers.find(f => f._id === flowerId);
+    if (flower) {
+      res.json({ success: true, data: flower });
+    } else {
+      res.status(404).json({ success: false, message: 'Flower not found' });
+    }
+
+  } catch (error) {
+    console.error('Single flower API error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to fetch flower',
+      error: error.message 
+    });
   }
 });
 
 // Get flowers by category
-router.get('/category/:categoryId', async (req, res) => {
+router.get('/category/:category', async (req, res) => {
   try {
-    const { categoryId } = req.params;
-    const {
-      page = 1,
-      limit = 20,
-      sortBy = 'createdAt',
-      sortOrder = 'desc'
-    } = req.query;
-
-    // First, check if category exists
-    const category = await Category.findById(categoryId);
-    if (!category) {
-      return res.status(404).json({ message: 'Category not found' });
+    const category = req.params.category;
+    
+    try {
+      // Try MongoDB first
+      const flowers = await Flower.find({ 
+        category: category, 
+        isActive: true 
+      }).populate('category');
+      
+      if (flowers.length > 0) {
+        console.log('✓ Using MongoDB category data');
+        res.json({ success: true, data: flowers });
+        return;
+      }
+    } catch (mongoError) {
+      console.log('⚠ MongoDB unavailable, filtering mock data');
     }
 
-    const filters = {
-      active: true,
-      // Add category filtering logic here based on your flower-category relationship
-    };
+    // Fallback to mock data filtering
+    const mockFlowers = [
+      // Include the same mockFlowers array as above
+      // (truncated for brevity - would include full array)
+    ];
+    
+    const categoryFlowers = mockFlowers.filter(f => f.category === category && f.isActive);
+    res.json({ success: true, data: categoryFlowers });
 
-    const sortOptions = {};
-    sortOptions[sortBy] = sortOrder === 'desc' ? -1 : 1;
-
-    const skip = (page - 1) * limit;
-    const flowers = await Flower.find(filters)
-      .sort(sortOptions)
-      .skip(skip)
-      .limit(parseInt(limit));
-
-    const total = await Flower.countDocuments(filters);
-
-    res.json({
-      flowers,
-      category,
-      pagination: {
-        current: parseInt(page),
-        pages: Math.ceil(total / limit),
-        total,
-        limit: parseInt(limit)
-      }
-    });
   } catch (error) {
-    console.error('Error fetching flowers by category:', error);
-    res.status(500).json({ message: 'Failed to fetch flowers by category' });
+    console.error('Category flowers API error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to fetch category flowers',
+      error: error.message 
+    });
   }
 });
 
-// Get flower types and colors for filters
-router.get('/filters/options', async (req, res) => {
-  try {
-    const types = await Flower.distinct('type', { active: true });
-    const colors = await Flower.distinct('color', { active: true });
-
-    res.json({
-      types,
-      colors: colors.sort()
-    });
-  } catch (error) {
-    console.error('Error fetching filter options:', error);
-    res.status(500).json({ message: 'Failed to fetch filter options' });
-  }
-});
-
-// Admin routes for managing flowers
-router.post('/', authenticateToken, authorizeRoles('admin'), async (req, res) => {
+// Admin routes for flower management
+router.post('/', authenticateToken, authorizeRoles(['admin']), async (req, res) => {
   try {
     const flower = new Flower(req.body);
     await flower.save();
-    res.status(201).json({ message: 'Flower created successfully', flower });
+    res.status(201).json({ 
+      success: true, 
+      message: 'Flower created successfully',
+      data: flower 
+    });
   } catch (error) {
-    console.error('Flower creation error:', error);
-    res.status(500).json({ message: 'Failed to create flower' });
+    console.error('Create flower error:', error);
+    res.status(400).json({ 
+      success: false, 
+      message: 'Failed to create flower',
+      error: error.message 
+    });
   }
 });
 
-router.put('/:id', authenticateToken, authorizeRoles('admin'), async (req, res) => {
+router.put('/:id', authenticateToken, authorizeRoles(['admin']), async (req, res) => {
   try {
     const flower = await Flower.findByIdAndUpdate(
-      req.params.id,
-      req.body,
+      req.params.id, 
+      req.body, 
       { new: true, runValidators: true }
     );
     
     if (!flower) {
-      return res.status(404).json({ message: 'Flower not found' });
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Flower not found' 
+      });
     }
-
-    res.json({ message: 'Flower updated successfully', flower });
+    
+    res.json({ 
+      success: true, 
+      message: 'Flower updated successfully',
+      data: flower 
+    });
   } catch (error) {
-    console.error('Flower update error:', error);
-    res.status(500).json({ message: 'Failed to update flower' });
+    console.error('Update flower error:', error);
+    res.status(400).json({ 
+      success: false, 
+      message: 'Failed to update flower',
+      error: error.message 
+    });
   }
 });
 
-router.delete('/:id', authenticateToken, authorizeRoles('admin'), async (req, res) => {
+router.delete('/:id', authenticateToken, authorizeRoles(['admin']), async (req, res) => {
   try {
-    const flower = await Flower.findByIdAndUpdate(
-      req.params.id,
-      { active: false },
-      { new: true }
-    );
+    const flower = await Flower.findByIdAndDelete(req.params.id);
     
     if (!flower) {
-      return res.status(404).json({ message: 'Flower not found' });
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Flower not found' 
+      });
     }
-
-    res.json({ message: 'Flower deactivated successfully' });
+    
+    res.json({ 
+      success: true, 
+      message: 'Flower deleted successfully' 
+    });
   } catch (error) {
-    console.error('Flower deletion error:', error);
-    res.status(500).json({ message: 'Failed to delete flower' });
+    console.error('Delete flower error:', error);
+    res.status(400).json({ 
+      success: false, 
+      message: 'Failed to delete flower',
+      error: error.message 
+    });
   }
 });
 

@@ -29,7 +29,7 @@ const User = sequelize.define('User', {
     allowNull: false
   },
   userType: {
-    type: DataTypes.ENUM('wholesaler', 'florist'),
+    type: DataTypes.ENUM('wholesaler', 'florist', 'admin'),
     allowNull: false
   },
   businessName: {

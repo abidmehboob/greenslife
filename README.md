@@ -158,7 +158,7 @@ The application will be available at:
 ### Test Users (Already Created)
 - **Wholesaler**: `wholesaler@test.com` / `password123`
 - **Florist**: `florist@test.com` / `password123`
-- **Admin**: `admin@test.com` / `password123`
+- **Admin**: `admin@test.com` / `admin123`
 
 ### Production Build
 

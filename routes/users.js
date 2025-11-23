@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
-const User = require('../models/User');
+const { User } = require('../models/postgres');
+const { sequelize } = require('../config/database');
+const { Op } = require('sequelize');
 const { authenticateToken, authorizeRoles } = require('../middleware/auth');
 
 // Get all users (admin only)
@@ -8,29 +10,26 @@ router.get('/', authenticateToken, authorizeRoles('admin'), async (req, res) => 
   try {
     const { userType, page = 1, limit = 20, search } = req.query;
     
-    let query = {};
-    if (userType) {
-      query.userType = userType;
-    }
-    
+    const where = {};
+    if (userType) where.userType = userType;
     if (search) {
-      query.$or = [
-        { firstName: new RegExp(search, 'i') },
-        { lastName: new RegExp(search, 'i') },
-        { email: new RegExp(search, 'i') },
-        { businessName: new RegExp(search, 'i') }
+      where[Op.or] = [
+        { firstName: { [Op.iLike]: `%${search}%` } },
+        { lastName: { [Op.iLike]: `%${search}%` } },
+        { email: { [Op.iLike]: `%${search}%` } },
+        { businessName: { [Op.iLike]: `%${search}%` } }
       ];
     }
 
-    const skip = (page - 1) * limit;
+    const offset = (page - 1) * limit;
 
-    const users = await User.find(query)
-      .select('-password -verificationToken -resetPasswordToken')
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(parseInt(limit));
-
-    const total = await User.countDocuments(query);
+    const { rows: users, count: total } = await User.findAndCountAll({
+      where,
+      attributes: { exclude: ['password'] },
+      order: [['createdAt', 'DESC']],
+      offset: parseInt(offset),
+      limit: parseInt(limit)
+    });
 
     res.json({
       users,
@@ -50,12 +49,11 @@ router.get('/', authenticateToken, authorizeRoles('admin'), async (req, res) => 
 // Get user by ID (admin only)
 router.get('/:id', authenticateToken, authorizeRoles('admin'), async (req, res) => {
   try {
-    const user = await User.findById(req.params.id)
-      .select('-password -verificationToken -resetPasswordToken');
-    
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
+    const user = await User.findByPk(req.params.id, {
+      attributes: { exclude: ['password'] }
+    });
+
+    if (!user) return res.status(404).json({ message: 'User not found' });
 
     res.json(user);
   } catch (error) {
@@ -70,27 +68,14 @@ router.patch('/:id/status', authenticateToken, authorizeRoles('admin'), async (r
     const { isActive, isVerified } = req.body;
     
     const updateData = {};
-    if (typeof isActive === 'boolean') {
-      updateData.isActive = isActive;
-    }
-    if (typeof isVerified === 'boolean') {
-      updateData.isVerified = isVerified;
-    }
+    if (typeof isActive === 'boolean') updateData.isActive = isActive;
+    if (typeof isVerified === 'boolean') updateData.isVerified = isVerified;
 
-    const user = await User.findByIdAndUpdate(
-      req.params.id,
-      updateData,
-      { new: true }
-    ).select('-password -verificationToken -resetPasswordToken');
+    await User.update(updateData, { where: { id: req.params.id } });
+    const user = await User.findByPk(req.params.id, { attributes: { exclude: ['password'] } });
+    if (!user) return res.status(404).json({ message: 'User not found' });
 
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-
-    res.json({ 
-      message: 'User status updated successfully', 
-      user 
-    });
+    res.json({ message: 'User status updated successfully', user });
   } catch (error) {
     console.error('User status update error:', error);
     res.status(500).json({ message: 'Failed to update user status' });
@@ -100,16 +85,8 @@ router.patch('/:id/status', authenticateToken, authorizeRoles('admin'), async (r
 // Delete user (admin only)
 router.delete('/:id', authenticateToken, authorizeRoles('admin'), async (req, res) => {
   try {
-    const user = await User.findByIdAndUpdate(
-      req.params.id,
-      { isActive: false },
-      { new: true }
-    );
-
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-
+    const [updated] = await User.update({ isActive: false }, { where: { id: req.params.id } });
+    if (!updated) return res.status(404).json({ message: 'User not found' });
     res.json({ message: 'User deactivated successfully' });
   } catch (error) {
     console.error('User deletion error:', error);
@@ -120,27 +97,16 @@ router.delete('/:id', authenticateToken, authorizeRoles('admin'), async (req, re
 // Get user statistics (admin only)
 router.get('/stats/overview', authenticateToken, authorizeRoles('admin'), async (req, res) => {
   try {
-    const stats = await User.aggregate([
-      {
-        $group: {
-          _id: '$userType',
-          count: { $sum: 1 },
-          active: { $sum: { $cond: ['$isActive', 1, 0] } },
-          verified: { $sum: { $cond: ['$isVerified', 1, 0] } }
-        }
-      }
-    ]);
+    const totalUsers = await User.count();
+    const activeUsers = await User.count({ where: { isActive: true } });
+    const verifiedUsers = await User.count({ where: { isVerified: true } });
 
-    const totalUsers = await User.countDocuments();
-    const activeUsers = await User.countDocuments({ isActive: true });
-    const verifiedUsers = await User.countDocuments({ isVerified: true });
-
-    res.json({
-      totalUsers,
-      activeUsers,
-      verifiedUsers,
-      byUserType: stats
+    const byUserType = await User.findAll({
+      attributes: ['userType', [sequelize.fn('COUNT', sequelize.col('id')), 'count']],
+      group: ['userType']
     });
+
+    res.json({ totalUsers, activeUsers, verifiedUsers, byUserType });
   } catch (error) {
     console.error('User stats error:', error);
     res.status(500).json({ message: 'Failed to fetch user statistics' });
