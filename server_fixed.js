@@ -95,7 +95,7 @@ const createTestUsers = async () => {
         email: 'admin@test.com',
         password: 'password123',
         userType: 'admin',
-        businessName: 'GreenLife Admin',
+        businessName: 'greenslife Admin',
         firstName: 'Admin',
         lastName: 'User'
       }
@@ -148,7 +148,7 @@ const startServer = async () => {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🌸 GreenLife - Professional Flower Distribution Platform</title>
+    <title>🌸 greenslife - Professional Flower Distribution Platform</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { 
@@ -219,14 +219,14 @@ const startServer = async () => {
 <body>
     <div class="header">
         <div class="container">
-            <h1>🌸 GreenLife Professional Flower Distribution Platform</h1>
+            <h1>🌸 greenslife Professional Flower Distribution Platform</h1>
             <p>Connecting wholesalers and florists with premium fresh flowers worldwide</p>
         </div>
     </div>
 
     <div class="container">
         <div class="card" id="loginSection">
-            <h2>🔐 Welcome to GreenLife</h2>
+            <h2>🔐 Welcome to greenslife</h2>
             <p>Choose your account type to access personalized pricing and features:</p>
             <div class="grid">
                 <div style="padding: 1.5rem; border-radius: 12px; border: 2px solid #2196f3;">
@@ -266,7 +266,7 @@ const startServer = async () => {
 
         <div class="card">
             <h2>📊 System Status</h2>
-            <div id="globalResult" class="info">Ready to test GreenLife functionality...</div>
+            <div id="globalResult" class="info">Ready to test greenslife functionality...</div>
         </div>
     </div>
 

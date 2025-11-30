@@ -1,0 +1,78 @@
+version: '3.8'
+
+services:
+  # MongoDB service for catalog data
+  mongodb:
+    image: mongo:7.0
+    container_name: greenslife-mongodb-prod
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-greenslife123}
+      MONGO_INITDB_DATABASE: flower-catalog
+    volumes:
+      - mongodb_data:/data/db
+      - ./scripts/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+    networks:
+      - greenslife-network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/flower-catalog --quiet
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Node.js backend application
+  app:
+    build: 
+      context: .
+      dockerfile: Dockerfile.prod
+    container_name: greenslife-app-prod
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      MONGODB_URI: mongodb://admin:${MONGO_PASSWORD:-greenslife123}@mongodb:27017/flower-catalog?authSource=admin
+      DATABASE_URL: /app/database/flower_ecommerce.db
+      JWT_SECRET: ${JWT_SECRET:-your_jwt_secret_key_here_make_it_very_long_and_random_for_production}
+      JWT_EXPIRE: 7d
+      CLIENT_URL: ${CLIENT_URL:-http://localhost}
+      SMTP_HOST: ${SMTP_HOST:-smtp.ethereal.email}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASS: ${SMTP_PASS}
+      EMAIL_FROM: ${EMAIL_FROM:-noreply@greenslife.com}
+    volumes:
+      - ./database:/app/database
+      - ./storage:/app/storage
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - greenslife-network
+
+  # Production frontend with Nginx
+  frontend:
+    build:
+      context: ./client
+      dockerfile: Dockerfile.prod
+    container_name: greenslife-frontend-prod
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - app
+    networks:
+      - greenslife-network
+
+volumes:
+  mongodb_data:
+    driver: local
+
+networks:
+  greenslife-network:
+    driver: bridge

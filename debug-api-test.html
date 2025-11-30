@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>API Debug Test</title>
+</head>
+<body>
+    <h1>API Debug Test</h1>
+    <div id="result"></div>
+    
+    <script>
+        const API_BASE = 'http://localhost:3001/api';
+        const token = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI0MzYwMDlhMC1jMDEwLTQ0NmQtODJmNC1mNzVjOTM5OTY0ODciLCJpYXQiOjE3NjQwOTM3OTQsImV4cCI6MTc2NDY5ODU5NH0.csvdkwPdPkqYpeSqWnGwTb9hS2UxfJAQOVjQ_9rL8Wg';
+        
+        async function testAPI() {
+            try {
+                console.log('Testing API...');
+                const response = await fetch(`${API_BASE}/admin/products?page=1&limit=3`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                console.log('Response status:', response.status);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                console.log('Response data:', data);
+                
+                document.getElementById('result').innerHTML = `
+                    <h2>API Test Results:</h2>
+                    <p><strong>Success:</strong> ${data.success}</p>
+                    <p><strong>Product Count:</strong> ${data.products ? data.products.length : 0}</p>
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                `;
+                
+            } catch (error) {
+                console.error('API Test Error:', error);
+                document.getElementById('result').innerHTML = `
+                    <h2>API Test Error:</h2>
+                    <p style="color: red;">${error.message}</p>
+                `;
+            }
+        }
+        
+        // Run test when page loads
+        testAPI();
+    </script>
+</body>
+</html>

@@ -1,5 +1,5 @@
 
-# 🌸 GreenLife Carnation Image Sourcing Guide
+# 🌸 greenslife Carnation Image Sourcing Guide
 
 ## Legal Image Sources for Your Carnation Catalog
 

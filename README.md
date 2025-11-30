@@ -1,4 +1,4 @@
-# GreenLife - Flower Distribution Ecommerce Platform
+# greenslife - Flower Distribution Ecommerce Platform
 
 A complete MERN stack ecommerce application for flower distribution with hybrid database architecture and role-based interfaces for wholesalers and florists.
 
@@ -334,4 +334,4 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ---
 
-Made with ❤️ for the flower distribution industry • **GreenLife** 🌱
+Made with ❤️ for the flower distribution industry • **greenslife** 🌱

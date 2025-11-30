@@ -95,7 +95,7 @@ const createTestUsers = async () => {
         email: 'admin@test.com',
         password: 'password123',
         userType: 'admin',
-        businessName: 'GreenLife Admin',
+        businessName: 'greenslife Admin',
         firstName: 'Admin',
         lastName: 'User'
       }
@@ -149,7 +149,7 @@ const startServer = async () => {
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>🌸 GreenLife - Professional Flower Distribution Platform</title>
+        <title>🌸 greenslife - Professional Flower Distribution Platform</title>
         <style>
             * { margin: 0; padding: 0; box-sizing: border-box; }
             body { 
@@ -322,7 +322,7 @@ const startServer = async () => {
                 <div class="navbar">
                     <div class="logo">
                         <span>🌸</span>
-                        <span>GreenLife</span>
+                        <span>greenslife</span>
                     </div>
                     <div class="user-info" id="userInfo" style="display: none;">
                         <span id="userType"></span> | <span id="userBusiness"></span>
@@ -354,7 +354,7 @@ const startServer = async () => {
         <div class="container">
             <!-- Login Section -->
             <div class="card" id="loginSection">
-                <h2>🔐 Welcome to GreenLife</h2>
+                <h2>🔐 Welcome to greenslife</h2>
                 <p style="font-size: 1.1rem; margin-bottom: 2rem; color: #666;">Choose your account type to access personalized pricing and features:</p>
                 <div class="grid">
                     <div style="background: linear-gradient(135deg, #e3f2fd, #f3e5f5); padding: 1.5rem; border-radius: 12px; border: 2px solid #2196f3;">
@@ -423,7 +423,7 @@ const startServer = async () => {
             <div class="card">
                 <h2>📊 System Status & Results</h2>
                 <div id="globalResult" class="info">
-                    Ready to test GreenLife functionality...
+                    Ready to test greenslife functionality...
                 </div>
             </div>
         </div>
@@ -788,7 +788,7 @@ const startServer = async () => {
 
             // Auto-test server health on page load
             window.onload = function() {
-                showResult('🌸 GreenLife Platform Ready - Please login to continue', 'info');
+                showResult('🌸 greenslife Platform Ready - Please login to continue', 'info');
             };
         </script>
     </body>

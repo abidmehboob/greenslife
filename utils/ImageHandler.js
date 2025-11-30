@@ -1,5 +1,5 @@
 /**
- * Smart Image Handler for GreenLife
+ * Smart Image Handler for greenslife
  * Automatically detects and serves the best available image format
  */
 

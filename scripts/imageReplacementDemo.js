@@ -5,7 +5,7 @@
 
 const ImageHandler = require('../utils/ImageHandler');
 
-console.log('🌸 GreenLife Image Replacement Demo\n');
+console.log('🌸 greenslife Image Replacement Demo\n');
 
 // Initialize the image handler
 const imageHandler = new ImageHandler();
@@ -112,7 +112,7 @@ if (status.hasRealPhotos) {
     console.log('Once you add real images, your flower catalog will look professional!');
 }
 
-console.log('\n🌸 Your GreenLife flower distribution platform will automatically');
+console.log('\n🌸 Your greenslife flower distribution platform will automatically');
 console.log('   display the most professional images available!');
 
 module.exports = { imageHandler, searchTerms };

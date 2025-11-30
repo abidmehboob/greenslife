@@ -1,0 +1,82 @@
+version: '3.8'
+
+services:
+  # MongoDB service for catalog data (products, categories)
+  mongodb:
+    image: mongo:7.0
+    container_name: greenslife-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: greenslife123
+      MONGO_INITDB_DATABASE: flower-catalog
+    volumes:
+      - mongodb_data:/data/db
+      - ./scripts/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+    networks:
+      - greenslife-network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/flower-catalog --quiet
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Node.js application
+  app:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: greenslife-app
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      NODE_ENV: development
+      PORT: 3001
+      MONGODB_URI: mongodb://admin:greenslife123@mongodb:27017/flower-catalog?authSource=admin
+      DATABASE_URL: /app/database/flower_ecommerce.db
+      JWT_SECRET: your_jwt_secret_key_here_make_it_very_long_and_random_for_production
+      JWT_EXPIRE: 7d
+      CLIENT_URL: http://localhost:3000
+    volumes:
+      - ./database:/app/database
+      - ./storage:/app/storage
+      - .:/app
+      - /app/node_modules
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - greenslife-network
+    working_dir: /app
+    command: npm run dev
+
+  # Vite frontend development server
+  frontend:
+    build:
+      context: ./client
+      dockerfile: Dockerfile.dev
+    container_name: greenslife-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      VITE_API_URL: http://localhost:3001/api
+    volumes:
+      - ./client:/app
+      - /app/node_modules
+    networks:
+      - greenslife-network
+    working_dir: /app
+    command: npm run dev
+
+volumes:
+  mongodb_data:
+    driver: local
+
+networks:
+  greenslife-network:
+    driver: bridge

@@ -1,5 +1,5 @@
 /**
- * Legal Image Sourcing System for GreenLife Carnations
+ * Legal Image Sourcing System for greenslife Carnations
  * This script helps you source high-quality carnation images legally
  */
 
@@ -136,7 +136,7 @@ const legalImageSources = {
 // Create image download instructions
 function generateImageSourcingInstructions() {
     let instructions = `
-# 🌸 GreenLife Carnation Image Sourcing Guide
+# 🌸 greenslife Carnation Image Sourcing Guide
 
 ## Legal Image Sources for Your Carnation Catalog
 

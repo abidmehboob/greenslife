@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
-const { Flower, Category } = require('../models/mongo');
+const Flower = require('../models/mongo/Flower');
+const Category = require('../models/mongo/Category');
 const { authenticateToken, authorizeRoles } = require('../middleware/auth');
 const { categories, flowers: carnationFlowers } = require('../data/carnationCatalog');
 
@@ -14,55 +15,67 @@ router.get('/', async (req, res) => {
     const search = req.query.search;
     const skip = (page - 1) * limit;
 
-    // Use our expanded carnation catalog
-    let allFlowers = carnationFlowers.map(flower => ({
-      _id: flower.id,
-      id: flower.id,
+    let flowers, totalCount;
+
+    // Try MongoDB first
+    let query = { active: true };
+    
+    // Apply category filter
+    if (category) {
+      query.type = category;
+    }
+    
+    // Apply search filter
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { variety: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } },
+        { color: { $regex: search, $options: 'i' } },
+        { tags: { $in: [new RegExp(search, 'i')] } }
+      ];
+    }
+    
+    // Get flowers from MongoDB
+    const mongoFlowers = await Flower.find(query)
+      .skip(skip)
+      .limit(limit)
+      .sort({ featured: -1, createdAt: -1 });
+    
+    totalCount = await Flower.countDocuments(query);
+    
+    // Transform MongoDB data for API response  
+    flowers = mongoFlowers.map(flower => ({
+      _id: flower._id,
+      id: flower._id,
       name: flower.name,
-      category: flower.category,
-      categoryId: flower.categoryId,
+      variety: flower.variety,
+      category: flower.type,
+      categoryId: flower.type,
       description: flower.description,
       color: flower.color,
-      colors: flower.colors,
-      images: [{ url: flower.image, isPrimary: true, alt: flower.name }],
+      origin: flower.origin,
+      season: flower.availability?.seasonality?.seasons?.join(', ') || 'All year',
+      images: flower.images,
       availability: flower.availability,
       pricing: flower.pricing,
       specifications: flower.specifications,
-      isNew: flower.isNew || false,
+      tags: flower.tags,
+      featured: flower.featured,
       isActive: true,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     }));
 
-    // Apply category filter
-    if (category) {
-      allFlowers = allFlowers.filter(flower => 
-        flower.categoryId === category || 
-        flower.category.toLowerCase().includes(category.toLowerCase())
-      );
-    }
-
-    // Apply search filter
-    if (search) {
-      const searchLower = search.toLowerCase();
-      allFlowers = allFlowers.filter(flower =>
-        flower.name.toLowerCase().includes(searchLower) ||
-        flower.description.toLowerCase().includes(searchLower) ||
-        flower.color.toLowerCase().includes(searchLower) ||
-        flower.category.toLowerCase().includes(searchLower)
-      );
-    }
-
     // Calculate pagination
-    const totalFlowers = allFlowers.length;
+    const totalFlowers = totalCount;
     const totalPages = Math.ceil(totalFlowers / limit);
-    const paginatedFlowers = allFlowers.slice(skip, skip + limit);
 
     // Apply user-specific pricing if authenticated
-    let processedFlowers = paginatedFlowers;
+    let processedFlowers = flowers;
     if (req.user) {
       const userType = req.user.userType;
-      processedFlowers = paginatedFlowers.map(flower => {
+      processedFlowers = flowers.map(flower => {
         const flowerCopy = { ...flower };
         
         if (userType === 'wholesaler') {
@@ -87,7 +100,7 @@ router.get('/', async (req, res) => {
       });
     } else {
       // Default to florist pricing for unauthenticated users
-      processedFlowers = paginatedFlowers.map(flower => {
+      processedFlowers = flowers.map(flower => {
         const flowerCopy = { ...flower };
         flowerCopy.pricing = {
           pricePerStem: flower.pricing.florist.pricePerStem,
@@ -97,6 +110,10 @@ router.get('/', async (req, res) => {
         return flowerCopy;
       });
     }
+
+    // Get categories from MongoDB
+    const mongoCategories = await Category.find({ active: true })
+      .sort({ displayOrder: 1, name: 1 });
 
     // Return paginated response
     res.json({
@@ -110,7 +127,7 @@ router.get('/', async (req, res) => {
         hasNextPage: page < totalPages,
         hasPrevPage: page > 1
       },
-      categories: categories,
+      categories: mongoCategories.map(cat => ({ id: cat._id, name: cat.name, slug: cat.slug })),
       filters: {
         category: category || null,
         search: search || null
@@ -130,9 +147,18 @@ router.get('/', async (req, res) => {
 // Get categories
 router.get('/categories', async (req, res) => {
   try {
+    const categories = await Category.find({ active: true })
+      .sort({ displayOrder: 1, name: 1 });
+    
     res.json({
       success: true,
-      categories: categories
+      categories: categories.map(cat => ({
+        id: cat._id,
+        name: cat.name,
+        description: cat.description,
+        image: cat.image?.url,
+        slug: cat.slug
+      }))
     });
   } catch (error) {
     res.status(500).json({

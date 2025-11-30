@@ -115,7 +115,7 @@ const createTestUsers = async () => {
         email: 'admin@test.com',
         password: 'password123',
         userType: 'admin',
-        businessName: 'GreenLife Admin',
+        businessName: 'greenslife Admin',
         firstName: 'Admin',
         lastName: 'User'
       }
@@ -144,6 +144,10 @@ const createTestUsers = async () => {
 const startServer = async () => {
   await initializeDatabases();
   
+  // Initialize email service
+  const emailService = require('./services/emailService');
+  await emailService.initialize();
+  
   // Redirect root to frontend
   app.get('/', (req, res) => {
     res.redirect('/app');
@@ -168,7 +172,7 @@ const startServer = async () => {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🌸 GreenLife - Professional Flower Distribution Platform</title>
+    <title>🌸 greenslife - Professional Flower Distribution Platform</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { 
@@ -240,7 +244,7 @@ const startServer = async () => {
     <!-- Header Section -->
     <div class="header">
         <div class="container">
-            <h1>🌿 GreenLife</h1>
+            <h1>🌿 greenslife</h1>
             <p>Premium Flower Distribution Platform - Connecting wholesalers and florists with the world's finest fresh flowers since 1985</p>
         </div>
     </div>
@@ -248,7 +252,7 @@ const startServer = async () => {
     <div class="container">
         <!-- Landing Page -->
         <div class="card" id="loginSection">
-            <h2>🌸 Welcome to GreenLife Distribution</h2>
+            <h2>🌸 Welcome to greenslife Distribution</h2>
             <p style="font-size: 1.2rem; color: #555; margin-bottom: 2rem; text-align: center;">Choose your account type to access personalized pricing, exclusive catalogs, and professional tools tailored to your business needs.</p>
             
             <div class="grid">
@@ -297,7 +301,7 @@ const startServer = async () => {
             
             <!-- Features Section -->
             <div style="margin-top: 3rem; text-align: center;">
-                <h3 style="color: #1e8449; margin-bottom: 1.5rem;">🌟 Why Choose GreenLife?</h3>
+                <h3 style="color: #1e8449; margin-bottom: 1.5rem;">🌟 Why Choose greenslife?</h3>
                 <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem;">
                     <div style="padding: 1.5rem; background: linear-gradient(135deg, #e8f8f5, #d1f2eb); border-radius: 12px;">
                         <h4 style="color: #27ae60; margin-bottom: 0.5rem;">🚚 Global Distribution</h4>
@@ -320,7 +324,7 @@ const startServer = async () => {
             <!-- User Welcome Header -->
             <div class="card" id="userWelcome">
                 <div style="text-align: center; padding: 1rem;">
-                    <h2 id="welcomeMessage">Welcome to GreenLife!</h2>
+                    <h2 id="welcomeMessage">Welcome to greenslife!</h2>
                     <p id="userInfo" style="color: #666; margin-bottom: 1rem;"></p>
                     <div style="display: flex; justify-content: center; gap: 1rem; flex-wrap: wrap;">
                         <span id="userRole" class="flower-category" style="margin: 0;"></span>
@@ -421,7 +425,7 @@ const startServer = async () => {
             <div class="auth-section" id="adminDashboard" style="display: none;">
                 <div class="card">
                     <h2>⚙️ Admin Dashboard</h2>
-                    <p style="font-size: 1.1rem; color: #666; margin-bottom: 2rem;">System administration and management tools for the GreenLife platform.</p>
+                    <p style="font-size: 1.1rem; color: #666; margin-bottom: 2rem;">System administration and management tools for the greenslife platform.</p>
                     
                     <div class="grid" style="margin-bottom: 2rem;">
                         <div style="text-align: center; padding: 1.5rem; background: linear-gradient(135deg, #e3f2fd, #bbdefb); border-radius: 12px;">
@@ -470,7 +474,7 @@ const startServer = async () => {
         
         <!-- Footer -->
         <div style="text-align: center; padding: 2rem; color: #666; border-top: 1px solid #e0e0e0; margin-top: 2rem;">
-            <p>© 2025 GreenLife Distribution Platform | Serving the global flower industry since 1985</p>
+            <p>© 2025 greenslife Distribution Platform | Serving the global flower industry since 1985</p>
             <p style="margin-top: 0.5rem;">🌍 Available in 35+ countries | 📞 24/7 Customer Support | 🚚 Temperature-Controlled Delivery</p>
         </div>
     </div>
@@ -852,7 +856,7 @@ const startServer = async () => {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🌸 GreenLife - Florist Portal</title>
+    <title>🌸 greenslife - Florist Portal</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -1058,7 +1062,7 @@ const startServer = async () => {
 </head>
 <body>
     <div class="header">
-        <h1>🌸 GreenLife Florist Portal</h1>
+        <h1>🌸 greenslife Florist Portal</h1>
         <p>Your trusted partner for fresh, beautiful flowers - designed specifically for florists</p>
     </div>
 
@@ -1182,12 +1186,26 @@ const startServer = async () => {
     next();
   });
 
+  // Health check endpoint
+  app.get('/api/health', (req, res) => {
+    res.json({
+      status: 'OK',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      services: {
+        database: 'connected',
+        email: 'initialized'
+      }
+    });
+  });
+
   // Routes
   app.use('/api/auth', require('./routes/auth'));
   app.use('/api/users', require('./routes/users'));
   app.use('/api/flowers', require('./routes/flowers'));
   app.use('/api/orders', require('./routes/orders'));
   app.use('/api/payments', require('./routes/payments'));
+  app.use('/api/admin', require('./routes/admin'));
 
   // Serve static files from public directory (images, etc.)
   app.use(express.static(path.join(__dirname, 'public')));
