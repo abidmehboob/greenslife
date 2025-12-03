@@ -49,7 +49,7 @@ const Payment = sequelize.define('Payment', {
     allowNull: true
   },
   providerResponse: {
-    type: DataTypes.JSONB,
+    type: DataTypes.JSON,
     allowNull: true
   },
   refundAmount: {
@@ -69,7 +69,7 @@ const Payment = sequelize.define('Payment', {
     allowNull: true
   },
   metadata: {
-    type: DataTypes.JSONB,
+    type: DataTypes.JSON,
     allowNull: true,
     defaultValue: {}
   }

@@ -41,6 +41,8 @@ const allowedOrigins = [
   'http://127.0.0.1:3000',
   'http://localhost:3001',
   'http://127.0.0.1:3001',
+  'http://localhost:3002',
+  'http://127.0.0.1:3002',
   'http://localhost',
   'http://127.0.0.1',
   'http://localhost:80',
@@ -48,9 +50,12 @@ const allowedOrigins = [
 ];
 app.use(cors({
   origin: (origin, callback) => {
+    console.log('CORS check - Origin received:', origin);
+    console.log('CORS check - Allowed origins:', allowedOrigins);
     // Allow non-browser requests (e.g., curl, server-to-server)
     if (!origin) return callback(null, true);
     if (allowedOrigins.includes(origin)) return callback(null, true);
+    console.log('CORS REJECTED - Origin not in allowed list:', origin);
     return callback(new Error('CORS policy: This origin is not allowed'), false);
   },
   credentials: true
@@ -105,7 +110,10 @@ const createTestUsers = async () => {
         userType: 'wholesaler',
         businessName: 'Wholesale Flowers Inc',
         firstName: 'John',
-        lastName: 'Wholesaler'
+        lastName: 'Wholesaler',
+        isActive: true,
+        emailVerified: true,
+        activationDate: new Date()
       },
       {
         email: 'florist@test.com',
@@ -113,7 +121,10 @@ const createTestUsers = async () => {
         userType: 'florist',
         businessName: 'Beautiful Blooms Florist',
         firstName: 'Jane',
-        lastName: 'Florist'
+        lastName: 'Florist',
+        isActive: true,
+        emailVerified: true,
+        activationDate: new Date()
       },
       {
         email: 'admin@test.com',
@@ -121,7 +132,10 @@ const createTestUsers = async () => {
         userType: 'admin',
         businessName: 'greenslife Admin',
         firstName: 'Admin',
-        lastName: 'User'
+        lastName: 'User',
+        isActive: true,
+        emailVerified: true,
+        activationDate: new Date()
       }
     ];
 
@@ -129,13 +143,23 @@ const createTestUsers = async () => {
       try {
         const existingUser = await User.findOne({ where: { email: userData.email } });
         if (!existingUser) {
-          await User.create(userData);
-          console.log(`✓ Test user created: ${userData.email}`);
+          const user = await User.create(userData);
+          console.log(`✓ Test user created: ${userData.email} (Active: ${user.isActive})`);
         } else {
-          console.log(`- Test user already exists: ${userData.email}`);
+          // Update existing users to ensure they are active for testing
+          if (!existingUser.isActive || !existingUser.emailVerified) {
+            await existingUser.update({
+              isActive: true,
+              emailVerified: true,
+              activationDate: new Date()
+            });
+            console.log(`✓ Test user activated: ${userData.email}`);
+          } else {
+            console.log(`- Test user already exists and is active: ${userData.email}`);
+          }
         }
       } catch (userError) {
-        console.log(`✗ Failed to create user ${userData.email}:`, userError.message);
+        console.log(`✗ Failed to create/update user ${userData.email}:`, userError.message);
       }
     }
     console.log('✓ Test user creation completed');

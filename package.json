@@ -19,7 +19,10 @@
     "create-images": "node scripts/createPlaceholderImages.js",
     "create-test-users": "node scripts/createTestUsers.js",
     "migrate": "node scripts/migrateCarnationData.js",
-    "migrate-docker": "scripts\\migrate-database.bat"
+    "migrate-docker": "scripts\\migrate-database.bat",
+    "db:init": "node scripts/initSQLiteDatabase.js",
+    "db:test": "node scripts/testSQLiteTransactions.js",
+    "db:stats": "node -e \"require('./scripts/initSQLiteDatabase').getDatabaseStats().then(stats => console.log(JSON.stringify(stats, null, 2)))\""
   },
   "keywords": [
     "ecommerce",

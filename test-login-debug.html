@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Login Debug Test</title>
+</head>
+<body>
+    <h1>Login Debug Test</h1>
+    <div id="result"></div>
+    
+    <script>
+        async function testLogin() {
+            const resultDiv = document.getElementById('result');
+            
+            try {
+                console.log('Testing login from frontend environment...');
+                console.log('Current location:', window.location.href);
+                console.log('Port:', window.location.port);
+                
+                // Test API Base URL Logic (same as in api.js)
+                let rawBase = window.location.hostname === 'localhost' && window.location.port === '3000'
+                  ? 'http://localhost:3001' 
+                  : '' // Use relative paths for production
+                
+                console.log('Raw base chosen:', rawBase);
+                
+                const normalizedBase = rawBase.replace(/\/$/, '');
+                const API_BASE = normalizedBase.endsWith('/api') ? normalizedBase : `${normalizedBase}/api`;
+                
+                console.log('API_BASE:', API_BASE);
+                
+                const url = `${API_BASE}/auth/login`;
+                console.log('Login URL:', url);
+                
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        email: 'wholesaler@test.com',
+                        password: 'password123'
+                    })
+                });
+                
+                console.log('Response status:', response.status);
+                console.log('Response headers:', [...response.headers.entries()]);
+                
+                if (!response.ok) {
+                    const text = await response.text();
+                    console.error('Error response:', text);
+                    resultDiv.innerHTML = `<p style="color: red;">Error: ${response.status} - ${text}</p>`;
+                    return;
+                }
+                
+                const data = await response.json();
+                console.log('Success response:', data);
+                resultDiv.innerHTML = `<p style="color: green;">Login successful! Token received.</p>`;
+                
+            } catch (error) {
+                console.error('Network error:', error);
+                resultDiv.innerHTML = `<p style="color: red;">Network Error: ${error.message}</p>`;
+            }
+        }
+        
+        // Run test when page loads
+        testLogin();
+    </script>
+</body>
+</html>

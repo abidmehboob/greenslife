@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Frontend Login Test</title>
+</head>
+<body>
+    <h1>Frontend Login Test</h1>
+    <button onclick="testLogin()" id="loginBtn">Test Login</button>
+    <div id="result" style="margin-top: 20px;"></div>
+    
+    <script>
+        async function testLogin() {
+            const resultDiv = document.getElementById('result');
+            const btn = document.getElementById('loginBtn');
+            
+            btn.disabled = true;
+            btn.textContent = 'Testing...';
+            resultDiv.innerHTML = '<p>Testing login...</p>';
+            
+            try {
+                console.log('Starting login test...');
+                console.log('Current location:', window.location.href);
+                console.log('Port:', window.location.port);
+                
+                // Same logic as api.js
+                let rawBase = window.location.hostname === 'localhost' && window.location.port === '3000'
+                  ? 'http://localhost:3001' 
+                  : '';
+                
+                console.log('Raw base:', rawBase);
+                const normalizedBase = rawBase.replace(/\/$/, '');
+                const API_BASE = normalizedBase.endsWith('/api') ? normalizedBase : `${normalizedBase}/api`;
+                console.log('API_BASE:', API_BASE);
+                
+                const url = `${API_BASE}/auth/login`;
+                console.log('Login URL:', url);
+                
+                const requestBody = {
+                    email: 'wholesaler@test.com',
+                    password: 'password123'
+                };
+                
+                console.log('Request body:', requestBody);
+                
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestBody)
+                });
+                
+                console.log('Response status:', response.status);
+                console.log('Response ok:', response.ok);
+                console.log('Response headers:', [...response.headers.entries()]);
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('Error response text:', errorText);
+                    resultDiv.innerHTML = `<p style="color: red;">HTTP ${response.status}: ${errorText}</p>`;
+                    return;
+                }
+                
+                const data = await response.json();
+                console.log('Success response:', data);
+                
+                if (data && data.success && data.token) {
+                    resultDiv.innerHTML = `<p style="color: green;">✅ Login successful!<br>Token: ${data.token.substring(0, 20)}...<br>User: ${data.user.email}</p>`;
+                } else {
+                    resultDiv.innerHTML = `<p style="color: orange;">⚠️ Response received but no token:<br>${JSON.stringify(data, null, 2)}</p>`;
+                }
+                
+            } catch (error) {
+                console.error('Network/JS error:', error);
+                console.error('Error type:', error.name);
+                console.error('Error message:', error.message);
+                console.error('Error stack:', error.stack);
+                
+                resultDiv.innerHTML = `<p style="color: red;">❌ Error: ${error.message}<br>Type: ${error.name}</p>`;
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Test Login';
+            }
+        }
+    </script>
+</body>
+</html>

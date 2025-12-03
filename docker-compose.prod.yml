@@ -63,7 +63,7 @@ services:
     container_name: greenslife-frontend-prod
     restart: unless-stopped
     ports:
-      - "80:80"
+      - "3002:80"
     depends_on:
       - app
     networks:

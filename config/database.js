@@ -31,7 +31,7 @@ const connectMongoDB = async () => {
 };
 
 // SQLite Connection Test
-const connectPostgreSQL = async () => {
+const connectSQLite = async () => {
   try {
     await sequelize.authenticate();
     console.log('SQLite connected successfully (Transactional Database)');
@@ -48,6 +48,7 @@ const connectPostgreSQL = async () => {
 module.exports = {
   sequelize,
   connectMongoDB,
-  connectPostgreSQL,
+  connectSQLite: connectSQLite,
+  connectPostgreSQL: connectSQLite, // Alias for backward compatibility
   mongoose
 };

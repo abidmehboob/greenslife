@@ -793,4 +793,183 @@ module.exports = {
   }
 }
 
+// Get all transactions (Admin only)
+router.get('/transactions', async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 50;
+    const skip = (page - 1) * limit;
+    
+    const { Order, Payment, User } = require('../models/postgres');
+    
+    // Get orders with user details
+    const orders = await Order.findAll({
+      include: [{
+        model: User,
+        as: 'user',
+        attributes: ['firstName', 'lastName', 'email', 'userType', 'businessName']
+      }, {
+        model: Payment,
+        as: 'payments'
+      }],
+      order: [['createdAt', 'DESC']],
+      limit: limit,
+      offset: skip
+    });
+    
+    const totalCount = await Order.count();
+    
+    // Process orders to include flower details
+    const processedOrders = await Promise.all(orders.map(async (order) => {
+      const orderData = order.toJSON();
+      
+      // Get flower details for each item
+      if (orderData.items && orderData.items.length > 0) {
+        const itemsWithDetails = await Promise.all(orderData.items.map(async (item) => {
+          try {
+            const flower = await Flower.findById(item.flowerId);
+            return {
+              ...item,
+              flowerDetails: flower ? {
+                name: flower.name,
+                variety: flower.variety,
+                color: flower.color
+              } : null
+            };
+          } catch (error) {
+            return item;
+          }
+        }));
+        orderData.items = itemsWithDetails;
+      }
+      
+      return orderData;
+    }));
+    
+    res.json({
+      success: true,
+      transactions: processedOrders,
+      pagination: {
+        currentPage: page,
+        totalPages: Math.ceil(totalCount / limit),
+        totalItems: totalCount,
+        itemsPerPage: limit
+      }
+    });
+    
+  } catch (error) {
+    console.error('Error fetching transactions:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch transactions',
+      error: error.message
+    });
+  }
+});
+
+// Update user status (Admin only)
+router.put('/users/:id/status', async (req, res) => {
+  try {
+    const userId = req.params.id;
+    const { isActive } = req.body;
+    
+    const { User } = require('../models/postgres');
+    const user = await User.findByPk(userId);
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+    
+    user.isActive = isActive;
+    await user.save();
+    
+    res.json({
+      success: true,
+      message: `User ${isActive ? 'activated' : 'deactivated'} successfully`,
+      user: {
+        id: user.id,
+        email: user.email,
+        isActive: user.isActive
+      }
+    });
+    
+  } catch (error) {
+    console.error('Error updating user status:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update user status',
+      error: error.message
+    });
+  }
+});
+
+// Create new user (Admin only)
+router.post('/users', async (req, res) => {
+  try {
+    const { email, password, firstName, lastName, userType, businessName } = req.body;
+    
+    // Validation
+    if (!email || !password || !firstName || !lastName || !userType || !businessName) {
+      return res.status(400).json({
+        success: false,
+        message: 'All required fields must be provided'
+      });
+    }
+    
+    const { User } = require('../models/postgres');
+    const bcrypt = require('bcryptjs');
+    
+    // Check if user already exists
+    const existingUser = await User.findOne({ where: { email } });
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        message: 'User with this email already exists'
+      });
+    }
+    
+    // Hash password
+    const saltRounds = 10;
+    const hashedPassword = await bcrypt.hash(password, saltRounds);
+    
+    // Create user
+    const newUser = await User.create({
+      email,
+      password: hashedPassword,
+      firstName,
+      lastName,
+      userType,
+      businessName,
+      isActive: true,
+      emailVerified: true,
+      registrationDate: new Date()
+    });
+    
+    res.status(201).json({
+      success: true,
+      message: 'User created successfully',
+      user: {
+        id: newUser.id,
+        email: newUser.email,
+        firstName: newUser.firstName,
+        lastName: newUser.lastName,
+        userType: newUser.userType,
+        businessName: newUser.businessName,
+        isActive: newUser.isActive
+      }
+    });
+    
+  } catch (error) {
+    console.error('Error creating user:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to create user',
+      error: error.message
+    });
+  }
+});
+
 module.exports = router;

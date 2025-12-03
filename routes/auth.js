@@ -288,18 +288,23 @@ router.post('/reset-password', async (req, res) => {
 router.post('/login', validateLogin, async (req, res) => {
   try {
     const { email, password } = req.body;
+    console.log(`Login attempt for: ${email}`);
 
     // Find user by email
     const user = await User.findOne({ where: { email } });
     
     if (!user) {
+      console.log(`Login failed: User not found for ${email}`);
       return res.status(401).json({ 
         success: false,
         message: 'Invalid credentials' 
       });
     }
 
+    console.log(`User found: ${email}, isActive: ${user.isActive}, emailVerified: ${user.emailVerified}`);
+
     if (!user.isActive) {
+      console.log(`Login failed: Account not active for ${email}`);
       return res.status(401).json({ 
         success: false,
         message: 'Account is not active. Please verify your email.',
@@ -309,7 +314,10 @@ router.post('/login', validateLogin, async (req, res) => {
 
     // Verify password
     const isPasswordValid = await user.comparePassword(password);
+    console.log(`Password validation for ${email}: ${isPasswordValid}`);
+    
     if (!isPasswordValid) {
+      console.log(`Login failed: Invalid password for ${email}`);
       return res.status(401).json({ 
         success: false,
         message: 'Invalid credentials' 
@@ -323,6 +331,7 @@ router.post('/login', validateLogin, async (req, res) => {
     const token = generateToken(user.id);
     const { password: userPassword, ...userWithoutPassword } = user.toJSON();
 
+    console.log(`Login successful for ${email}, userType: ${user.userType}`);
     res.json({
       success: true,
       message: 'Login successful',

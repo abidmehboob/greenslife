@@ -36,16 +36,20 @@ router.get('/', async (req, res) => {
       ];
     }
     
-    // Get flowers from MongoDB
-    const mongoFlowers = await Flower.find(query)
-      .skip(skip)
-      .limit(limit)
-      .sort({ featured: -1, createdAt: -1 });
-    
-    totalCount = await Flower.countDocuments(query);
-    
-    // Transform MongoDB data for API response  
-    flowers = mongoFlowers.map(flower => ({
+    try {
+      // For now, force fallback to carnation catalog since MongoDB flowers have incorrect pricing structure
+      throw new Error('Forcing carnation catalog fallback for proper pricing');
+      
+      // Try to get flowers from MongoDB
+      const mongoFlowers = await Flower.find(query)
+        .skip(skip)
+        .limit(limit)
+        .sort({ featured: -1, createdAt: -1 });
+      
+      totalCount = await Flower.countDocuments(query);
+      
+      // Transform MongoDB data for API response  
+      flowers = mongoFlowers.map(flower => ({
       _id: flower._id,
       id: flower._id,
       name: flower.name,
@@ -66,6 +70,39 @@ router.get('/', async (req, res) => {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     }));
+    
+    } catch (mongoError) {
+      console.log('MongoDB unavailable, using carnation catalog:', mongoError.message);
+      
+      // Use carnation flowers as fallback
+      let filteredFlowers = carnationFlowers;
+      console.log(`Using ${filteredFlowers.length} carnation flowers as fallback`);
+      
+      // Apply category filter
+      if (category) {
+        filteredFlowers = filteredFlowers.filter(flower => 
+          flower.categoryId === category || flower.category.toLowerCase().includes(category.toLowerCase())
+        );
+      }
+      
+      // Apply search filter
+      if (search) {
+        const searchLower = search.toLowerCase();
+        filteredFlowers = filteredFlowers.filter(flower =>
+          flower.name.toLowerCase().includes(searchLower) ||
+          flower.description.toLowerCase().includes(searchLower) ||
+          flower.color.toLowerCase().includes(searchLower) ||
+          flower.category.toLowerCase().includes(searchLower)
+        );
+      }
+      
+      totalCount = filteredFlowers.length;
+      
+      // Apply pagination
+      const startIndex = skip;
+      const endIndex = skip + limit;
+      flowers = filteredFlowers.slice(startIndex, endIndex);
+    }
 
     // Calculate pagination
     const totalFlowers = totalCount;
@@ -75,24 +112,65 @@ router.get('/', async (req, res) => {
     let processedFlowers = flowers;
     if (req.user) {
       const userType = req.user.userType;
+      console.log(`Processing flowers for user type: ${userType}, total flowers: ${flowers.length}`);
+      if (flowers.length > 0) {
+        console.log(`Raw MongoDB flower pricing structure:`, JSON.stringify(flowers[0].pricing, null, 2));
+      }
       processedFlowers = flowers.map(flower => {
         const flowerCopy = { ...flower };
         
         if (userType === 'wholesaler') {
-          // Wholesaler sees box pricing
+          // Wholesaler sees box pricing with emphasis on bulk purchases
+          const wholesalerPrice = flower.pricing.wholesaler || flower.pricing;
           flowerCopy.pricing = {
-            pricePerBox: flower.pricing.wholesaler.pricePerBox,
-            boxSize: flower.pricing.wholesaler.boxSize,
-            pricePerStem: flower.pricing.wholesaler.pricePerStem,
-            minQuantity: flower.pricing.wholesaler.boxSize,
-            displayUnit: 'box'
+            pricePerBox: wholesalerPrice.pricePerBox || flower.pricing.pricePerBox,
+            boxQuantity: wholesalerPrice.boxSize || flower.pricing.boxSize || flower.pricing.boxEquivalent || 25,
+            pricePerStem: wholesalerPrice.pricePerStem || flower.pricing.pricePerStem,
+            minQuantity: wholesalerPrice.boxSize || flower.pricing.boxSize || flower.pricing.boxEquivalent || 25,
+            displayUnit: 'box',
+            displayPrice: wholesalerPrice.pricePerBox || flower.pricing.pricePerBox,
+            displayText: `€${wholesalerPrice.pricePerBox || flower.pricing.pricePerBox} per box (${wholesalerPrice.boxSize || flower.pricing.boxSize || flower.pricing.boxEquivalent || 25} stems)`,
+            currency: 'EUR'
+          };
+        } else if (userType === 'florist') {
+          // Florist sees per-stem pricing
+          const floristPrice = flower.pricing.florist || flower.pricing;
+          flowerCopy.pricing = {
+            pricePerStem: floristPrice.pricePerStem || flower.pricing.pricePerStem,
+            minQuantity: floristPrice.minQuantity || flower.pricing.minQuantity || 1,
+            displayUnit: 'stem',
+            displayPrice: floristPrice.pricePerStem || flower.pricing.pricePerStem,
+            displayText: `€${floristPrice.pricePerStem || flower.pricing.pricePerStem} per stem`,
+            currency: 'EUR'
+          };
+        } else if (userType === 'admin') {
+          // Admin sees both pricing structures for management
+          const wholesalerPrice = flower.pricing.wholesaler || flower.pricing;
+          const floristPrice = flower.pricing.florist || flower.pricing;
+          flowerCopy.pricing = {
+            wholesaler: {
+              pricePerBox: wholesalerPrice.pricePerBox || flower.pricing.pricePerBox,
+              boxQuantity: wholesalerPrice.boxSize || flower.pricing.boxSize || flower.pricing.boxEquivalent || 25,
+              pricePerStem: wholesalerPrice.pricePerStem || flower.pricing.pricePerStem
+            },
+            florist: {
+              pricePerStem: floristPrice.pricePerStem || flower.pricing.pricePerStem,
+              minQuantity: floristPrice.minQuantity || flower.pricing.minQuantity || 1
+            },
+            displayUnit: 'both',
+            displayText: `Wholesale: €${wholesalerPrice.pricePerBox || flower.pricing.pricePerBox}/box | Retail: €${floristPrice.pricePerStem || flower.pricing.pricePerStem}/stem`,
+            currency: 'EUR'
           };
         } else {
-          // Florist and others see per-stem pricing
+          // Default florist pricing for other roles
+          const floristPrice = flower.pricing.florist || flower.pricing;
           flowerCopy.pricing = {
-            pricePerStem: flower.pricing.florist.pricePerStem,
-            minQuantity: flower.pricing.florist.minQuantity,
-            displayUnit: 'stem'
+            pricePerStem: floristPrice.pricePerStem || flower.pricing.pricePerStem,
+            minQuantity: floristPrice.minQuantity || flower.pricing.minQuantity || 1,
+            displayUnit: 'stem',
+            displayPrice: floristPrice.pricePerStem || flower.pricing.pricePerStem,
+            displayText: `€${floristPrice.pricePerStem || flower.pricing.pricePerStem} per stem`,
+            currency: 'EUR'
           };
         }
         
@@ -102,18 +180,29 @@ router.get('/', async (req, res) => {
       // Default to florist pricing for unauthenticated users
       processedFlowers = flowers.map(flower => {
         const flowerCopy = { ...flower };
+        const floristPrice = flower.pricing.florist || flower.pricing;
         flowerCopy.pricing = {
-          pricePerStem: flower.pricing.florist.pricePerStem,
-          minQuantity: flower.pricing.florist.minQuantity,
-          displayUnit: 'stem'
+          pricePerStem: floristPrice.pricePerStem || flower.pricing.pricePerStem,
+          minQuantity: floristPrice.minQuantity || flower.pricing.minQuantity || 1,
+          displayUnit: 'stem',
+          displayPrice: floristPrice.pricePerStem || flower.pricing.pricePerStem,
+          displayText: `€${floristPrice.pricePerStem || flower.pricing.pricePerStem} per stem`,
+          currency: 'EUR'
         };
         return flowerCopy;
       });
     }
 
-    // Get categories from MongoDB
-    const mongoCategories = await Category.find({ active: true })
-      .sort({ displayOrder: 1, name: 1 });
+    // Get categories from MongoDB or use fallback
+    let availableCategories;
+    try {
+      const mongoCategories = await Category.find({ active: true })
+        .sort({ displayOrder: 1, name: 1 });
+      availableCategories = mongoCategories.map(cat => ({ id: cat._id, name: cat.name, slug: cat.slug }));
+    } catch (categoryError) {
+      // Use carnation categories as fallback
+      availableCategories = categories.map(cat => ({ id: cat.id, name: cat.name, slug: cat.id }));
+    }
 
     // Return paginated response
     res.json({
@@ -127,7 +216,7 @@ router.get('/', async (req, res) => {
         hasNextPage: page < totalPages,
         hasPrevPage: page > 1
       },
-      categories: mongoCategories.map(cat => ({ id: cat._id, name: cat.name, slug: cat.slug })),
+      categories: availableCategories,
       filters: {
         category: category || null,
         search: search || null
@@ -139,6 +228,70 @@ router.get('/', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to fetch flowers',
+      error: error.message
+    });
+  }
+});
+
+// Get user's purchase history (last 1 year)
+router.get('/purchase-history', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const oneYearAgo = new Date();
+    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+    
+    const { Order } = require('../models/postgres');
+    const orders = await Order.findAll({
+      where: {
+        userId: userId,
+        createdAt: {
+          [require('sequelize').Op.gte]: oneYearAgo
+        }
+      },
+      order: [['createdAt', 'DESC']],
+      limit: 100
+    });
+    
+    // Process orders to include flower details
+    const processedOrders = await Promise.all(orders.map(async (order) => {
+      const orderData = order.toJSON();
+      
+      // Get flower details for each item
+      if (orderData.items && orderData.items.length > 0) {
+        const itemsWithDetails = await Promise.all(orderData.items.map(async (item) => {
+          try {
+            const flower = await Flower.findById(item.flowerId);
+            return {
+              ...item,
+              flowerDetails: flower ? {
+                name: flower.name,
+                variety: flower.variety,
+                color: flower.color,
+                image: flower.images?.[0]?.url
+              } : null
+            };
+          } catch (error) {
+            return item;
+          }
+        }));
+        orderData.items = itemsWithDetails;
+      }
+      
+      return orderData;
+    }));
+    
+    res.json({
+      success: true,
+      orders: processedOrders,
+      totalOrders: orders.length,
+      timeframe: 'Last 12 months'
+    });
+    
+  } catch (error) {
+    console.error('Error fetching purchase history:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch purchase history',
       error: error.message
     });
   }
@@ -280,6 +433,164 @@ router.get('/category/:categoryId', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to fetch category flowers',
+      error: error.message
+    });
+  }
+});
+
+// Admin-only endpoints for flower management
+
+// Create new flower (Admin only)
+router.post('/', authenticateToken, authorizeRoles('admin'), async (req, res) => {
+  try {
+    const flowerData = req.body;
+    
+    // Validate required fields
+    const requiredFields = ['name', 'variety', 'color', 'type'];
+    for (const field of requiredFields) {
+      if (!flowerData[field]) {
+        return res.status(400).json({
+          success: false,
+          message: `${field} is required`
+        });
+      }
+    }
+    
+    // Validate pricing structure
+    if (!flowerData.pricing || 
+        !flowerData.pricing.wholesaler || 
+        !flowerData.pricing.florist) {
+      return res.status(400).json({
+        success: false,
+        message: 'Both wholesaler and florist pricing are required'
+      });
+    }
+    
+    // Create new flower
+    const newFlower = new Flower({
+      name: flowerData.name,
+      variety: flowerData.variety,
+      type: flowerData.type || 'carnation',
+      color: flowerData.color,
+      origin: flowerData.origin || 'Netherlands',
+      description: flowerData.description || '',
+      images: flowerData.images || [{
+        url: `/images/flowers/${flowerData.type}/${flowerData.color.toLowerCase()}-${flowerData.type}.svg`,
+        alt: `${flowerData.variety} ${flowerData.name} - ${flowerData.color}`,
+        isPrimary: true
+      }],
+      availability: {
+        inStock: flowerData.availability?.inStock !== false,
+        stockQuantity: flowerData.availability?.stockQuantity || 100,
+        seasonality: {
+          available: true,
+          seasons: ['spring', 'summer', 'autumn', 'winter']
+        }
+      },
+      pricing: {
+        wholesaler: {
+          boxQuantity: parseInt(flowerData.pricing.wholesaler.boxQuantity) || 25,
+          pricePerBox: parseFloat(flowerData.pricing.wholesaler.pricePerBox),
+          pricePerStem: parseFloat(flowerData.pricing.wholesaler.pricePerBox) / (parseInt(flowerData.pricing.wholesaler.boxQuantity) || 25),
+          currency: 'PLN'
+        },
+        florist: {
+          pricePerStem: parseFloat(flowerData.pricing.florist.pricePerStem),
+          minimumQuantity: parseInt(flowerData.pricing.florist.minimumQuantity) || 1,
+          currency: 'PLN'
+        }
+      },
+      specifications: flowerData.specifications || {
+        stemLength: '40-50cm',
+        headSize: 'Standard',
+        petalCount: 'Multiple'
+      },
+      tags: flowerData.tags || [],
+      featured: flowerData.featured || false,
+      active: true
+    });
+    
+    const savedFlower = await newFlower.save();
+    
+    res.status(201).json({
+      success: true,
+      message: 'Flower created successfully',
+      flower: savedFlower
+    });
+    
+  } catch (error) {
+    console.error('Error creating flower:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to create flower',
+      error: error.message
+    });
+  }
+});
+
+// Update flower (Admin only)
+router.put('/:id', authenticateToken, authorizeRoles('admin'), async (req, res) => {
+  try {
+    const flowerId = req.params.id;
+    const updateData = req.body;
+    
+    const updatedFlower = await Flower.findByIdAndUpdate(
+      flowerId,
+      updateData,
+      { new: true, runValidators: true }
+    );
+    
+    if (!updatedFlower) {
+      return res.status(404).json({
+        success: false,
+        message: 'Flower not found'
+      });
+    }
+    
+    res.json({
+      success: true,
+      message: 'Flower updated successfully',
+      flower: updatedFlower
+    });
+    
+  } catch (error) {
+    console.error('Error updating flower:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update flower',
+      error: error.message
+    });
+  }
+});
+
+// Delete flower (Admin only)
+router.delete('/:id', authenticateToken, authorizeRoles('admin'), async (req, res) => {
+  try {
+    const flowerId = req.params.id;
+    
+    const deletedFlower = await Flower.findByIdAndUpdate(
+      flowerId,
+      { active: false },
+      { new: true }
+    );
+    
+    if (!deletedFlower) {
+      return res.status(404).json({
+        success: false,
+        message: 'Flower not found'
+      });
+    }
+    
+    res.json({
+      success: true,
+      message: 'Flower deleted successfully'
+    });
+    
+  } catch (error) {
+    console.error('Error deleting flower:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to delete flower',
       error: error.message
     });
   }

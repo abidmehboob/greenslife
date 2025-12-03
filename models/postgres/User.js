@@ -37,7 +37,7 @@ const User = sequelize.define('User', {
     allowNull: false
   },
   businessAddress: {
-    type: DataTypes.JSONB,
+    type: DataTypes.JSON,
     allowNull: true,
     defaultValue: {}
   },
