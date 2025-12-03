@@ -5,7 +5,8 @@ const Category = require('../models/mongo/Category');
 // MongoDB connection
 const connectMongoDB = async () => {
   try {
-    await mongoose.connect('mongodb://localhost:27017/flower-ecommerce', {
+    const mongoUrl = process.env.MONGODB_URI || 'mongodb://admin:greenslife123@mongodb:27017/flower-catalog?authSource=admin';
+    await mongoose.connect(mongoUrl, {
       useNewUrlParser: true,
       useUnifiedTopology: true,
     });

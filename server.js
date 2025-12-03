@@ -40,7 +40,11 @@ const allowedOrigins = [
   process.env.CLIENT_URL || 'http://localhost:3000', 
   'http://127.0.0.1:3000',
   'http://localhost:3001',
-  'http://127.0.0.1:3001'
+  'http://127.0.0.1:3001',
+  'http://localhost',
+  'http://127.0.0.1',
+  'http://localhost:80',
+  'http://127.0.0.1:80'
 ];
 app.use(cors({
   origin: (origin, callback) => {
