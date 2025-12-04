@@ -603,8 +603,7 @@ router.delete('/categories/:id', async (req, res) => {
 });
 
 // User Management Routes
-const { User } = require('../models/postgres');
-const { Order } = require('../models/postgres');
+// User and Order models already imported at top of file
 const { Op } = require('sequelize');
 
 // Get all users with pagination
@@ -873,7 +872,7 @@ router.get('/transactions', async (req, res) => {
     const limit = parseInt(req.query.limit) || 50;
     const skip = (page - 1) * limit;
     
-    const { Order, Payment, User } = require('../models/postgres');
+    const { Payment } = require('../models/postgres'); // Order and User already imported
     
     // Get orders with user details
     const orders = await Order.findAll({
@@ -946,7 +945,7 @@ router.put('/users/:id/status', async (req, res) => {
     const userId = req.params.id;
     const { isActive } = req.body;
     
-    const { User } = require('../models/postgres');
+    // User model already imported at top of file
     const user = await User.findByPk(userId);
     
     if (!user) {
@@ -992,7 +991,7 @@ router.post('/users', async (req, res) => {
       });
     }
     
-    const { User } = require('../models/postgres');
+    // User model already imported at top of file
     const bcrypt = require('bcryptjs');
     
     // Check if user already exists

@@ -25,7 +25,7 @@ router.get('/dashboard', optionalAuthenticate, async (req, res) => {
         return orderDate >= thirtyDaysAgo;
       });
 
-      const totalRevenue = recentOrders.reduce((sum, order) => sum + parseFloat(order.totalValue || 0), 0);
+      const totalRevenue = recentOrders.reduce((sum, order) => sum + parseFloat(order.total || 0), 0);
       const activeOrders = userOrders.filter(order => ['pending', 'processing'].includes(order.status)).length;
       const pendingDeliveries = userOrders.filter(order => order.status === 'shipped').length;
 
@@ -51,7 +51,7 @@ router.get('/dashboard', optionalAuthenticate, async (req, res) => {
         return orderDate >= thirtyDaysAgo;
       });
 
-      const totalSpent = recentOrders.reduce((sum, order) => sum + parseFloat(order.totalValue || 0), 0);
+      const totalSpent = recentOrders.reduce((sum, order) => sum + parseFloat(order.total || 0), 0);
       const activeOrders = userOrders.filter(order => ['pending', 'processing'].includes(order.status)).length;
       const completedOrders = userOrders.filter(order => order.status === 'completed').length;
 
@@ -79,13 +79,19 @@ router.get('/dashboard', optionalAuthenticate, async (req, res) => {
         }
       });
 
-      const totalRevenue = allOrders.reduce((sum, order) => sum + parseFloat(order.totalValue || 0), 0);
+      const totalRevenue = allOrders.reduce((sum, order) => sum + parseFloat(order.total || 0), 0);
+      
+      // Count pending deliveries (orders that are shipped or in transit)
+      const pendingDeliveries = await Order.count({
+        where: { status: ['shipped', 'processing'] }
+      });
 
       stats = {
-        totalUsers,
-        totalOrders,
-        availableFlowers: carnationFlowers.length,
+        totalInventory: carnationFlowers.length,
+        activeOrders: totalOrders, // Show total orders as "active"
+        pendingDeliveries,
         monthlyRevenue: Math.round(totalRevenue * 100) / 100,
+        totalUsers,
         currency: 'EUR'
       };
     }
