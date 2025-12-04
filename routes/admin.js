@@ -608,12 +608,14 @@ const { Op } = require('sequelize');
 
 // Get all users with pagination
 router.get('/users', async (req, res) => {
+  console.log('Admin users route called with params:', req.query);
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;
     const userType = req.query.userType;
     const search = req.query.search;
     const offset = (page - 1) * limit;
+    console.log('Admin users query parameters:', { page, limit, userType, search, offset });
 
     let whereClause = {};
     
@@ -630,6 +632,7 @@ router.get('/users', async (req, res) => {
       ];
     }
 
+    console.log('Admin users whereClause:', whereClause);
     const { count, rows: users } = await User.findAndCountAll({
       where: whereClause,
       limit,
@@ -638,6 +641,7 @@ router.get('/users', async (req, res) => {
       attributes: { exclude: ['password'] }
     });
 
+    console.log('Admin users found:', count, 'users');
     const totalPages = Math.ceil(count / limit);
 
     res.json({
@@ -654,7 +658,7 @@ router.get('/users', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error fetching users:', error);
+    console.error('Error fetching admin users:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch users',
@@ -1039,6 +1043,115 @@ router.post('/users', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to create user',
+      error: error.message
+    });
+  }
+});
+
+// Update user (Admin only)
+router.put('/users/:id', async (req, res) => {
+  try {
+    const userId = req.params.id;
+    const { email, password, firstName, lastName, userType, businessName, phone, isActive } = req.body;
+    
+    // Find user
+    const user = await User.findByPk(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+    
+    // Prepare update data
+    const updateData = {
+      firstName,
+      lastName,
+      userType,
+      businessName,
+      isActive: isActive !== undefined ? isActive : user.isActive
+    };
+    
+    // Only update email if provided and different
+    if (email && email !== user.email) {
+      // Check if email is already taken by another user
+      const existingUser = await User.findOne({ where: { email } });
+      if (existingUser && existingUser.id !== userId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Email is already taken by another user'
+        });
+      }
+      updateData.email = email;
+    }
+    
+    // Only update password if provided
+    if (password && password.trim() !== '') {
+      const bcrypt = require('bcryptjs');
+      const saltRounds = 10;
+      updateData.password = await bcrypt.hash(password, saltRounds);
+    }
+    
+    // Add phone if provided
+    if (phone !== undefined) {
+      updateData.phone = phone;
+    }
+    
+    // Update user
+    await user.update(updateData);
+    
+    res.json({
+      success: true,
+      message: 'User updated successfully',
+      user: {
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        userType: user.userType,
+        businessName: user.businessName,
+        phone: user.phone,
+        isActive: user.isActive
+      }
+    });
+    
+  } catch (error) {
+    console.error('Error updating user:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update user',
+      error: error.message
+    });
+  }
+});
+
+// Delete user (Admin only) - soft delete by deactivating
+router.delete('/users/:id', async (req, res) => {
+  try {
+    const userId = req.params.id;
+    
+    // Find user
+    const user = await User.findByPk(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+    
+    // Soft delete by deactivating
+    await user.update({ isActive: false });
+    
+    res.json({
+      success: true,
+      message: 'User deactivated successfully'
+    });
+    
+  } catch (error) {
+    console.error('Error deleting user:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to delete user',
       error: error.message
     });
   }
