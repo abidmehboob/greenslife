@@ -48,8 +48,41 @@ const authorizeRoles = (...roles) => {
   };
 };
 
+// Optional authentication - sets req.user if token provided but doesn't require it
+const optionalAuthenticate = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const token = authHeader && authHeader.split(' ')[1];
+
+    if (!token) {
+      // No token provided - continue without user
+      req.user = null;
+      return next();
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback-secret-key');
+    
+    // Find user in PostgreSQL
+    const user = await User.findByPk(decoded.userId);
+
+    if (!user || !user.isActive) {
+      // Invalid token - continue without user
+      req.user = null;
+      return next();
+    }
+
+    req.user = user;
+    next();
+  } catch (error) {
+    // Token verification failed - continue without user
+    req.user = null;
+    next();
+  }
+};
+
 module.exports = {
   generateToken,
   authenticateToken,
-  authorizeRoles
+  authorizeRoles,
+  optionalAuthenticate
 };

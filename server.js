@@ -1233,6 +1233,7 @@ const startServer = async () => {
   app.use('/api/flowers', require('./routes/flowers'));
   app.use('/api/orders', require('./routes/orders'));
   app.use('/api/payments', require('./routes/payments'));
+  app.use('/api/stats', require('./routes/stats'));
   app.use('/api/admin', require('./routes/admin'));
 
   // Serve static files from public directory (images, etc.)

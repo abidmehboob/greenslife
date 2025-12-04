@@ -3,12 +3,85 @@ const router = express.Router();
 const { authenticateToken, authorizeRoles } = require('../middleware/auth');
 const Flower = require('../models/mongo/Flower');
 const Category = require('../models/mongo/Category');
+const { Order, User } = require('../models/postgres');
 const fs = require('fs').promises;
 const path = require('path');
 
 // Middleware to ensure only admin can access these routes
 router.use(authenticateToken);
 router.use(authorizeRoles('admin'));
+
+// Get dashboard statistics
+router.get('/stats', async (req, res) => {
+  try {
+    // Get basic counts
+    const [totalUsers, totalOrders, totalFlowers] = await Promise.all([
+      User.count(),
+      Order.count(),
+      // For now use static flower count since we're using fallback data
+      Promise.resolve(16) // Carnation catalog count
+    ]);
+
+    // Get order statistics
+    const orders = await Order.findAll({
+      where: {
+        createdAt: {
+          [require('sequelize').Op.gte]: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) // Last 30 days
+        }
+      }
+    });
+
+    // Calculate stats
+    const totalRevenue = orders.reduce((sum, order) => sum + parseFloat(order.totalValue || 0), 0);
+    const pendingOrders = orders.filter(order => order.status === 'pending').length;
+    const completedOrders = orders.filter(order => order.status === 'completed').length;
+    const deliveredOrders = orders.filter(order => order.status === 'delivered').length;
+
+    // Get user type breakdown
+    const usersByType = await User.findAll({
+      attributes: [
+        'userType',
+        [require('sequelize').fn('COUNT', require('sequelize').col('id')), 'count']
+      ],
+      group: ['userType']
+    });
+
+    const userTypeStats = usersByType.reduce((acc, user) => {
+      acc[user.userType] = parseInt(user.dataValues.count);
+      return acc;
+    }, {});
+
+    res.json({
+      success: true,
+      stats: {
+        overview: {
+          totalUsers,
+          totalOrders,
+          totalFlowers,
+          totalRevenue: Math.round(totalRevenue * 100) / 100
+        },
+        orders: {
+          pending: pendingOrders,
+          completed: completedOrders,
+          delivered: deliveredOrders,
+          total: orders.length
+        },
+        users: userTypeStats,
+        revenue: {
+          monthly: Math.round(totalRevenue * 100) / 100,
+          currency: 'EUR'
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('Error fetching admin stats:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch statistics'
+    });
+  }
+});
 
 // Get all products for admin management
 router.get('/products', async (req, res) => {

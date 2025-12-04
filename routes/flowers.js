@@ -2,11 +2,11 @@ const express = require('express');
 const router = express.Router();
 const Flower = require('../models/mongo/Flower');
 const Category = require('../models/mongo/Category');
-const { authenticateToken, authorizeRoles } = require('../middleware/auth');
+const { authenticateToken, authorizeRoles, optionalAuthenticate } = require('../middleware/auth');
 const { categories, flowers: carnationFlowers } = require('../data/carnationCatalog');
 
 // Get all flowers with pagination and category filtering
-router.get('/', async (req, res) => {
+router.get('/', optionalAuthenticate, async (req, res) => {
   try {
     // Extract query parameters
     const page = parseInt(req.query.page) || 1;
@@ -121,55 +121,70 @@ router.get('/', async (req, res) => {
         
         if (userType === 'wholesaler') {
           // Wholesaler sees box pricing with emphasis on bulk purchases
-          const wholesalerPrice = flower.pricing.wholesaler || flower.pricing;
+          const wholesalerPrice = flower.pricing.wholesaler || {};
+          const boxSize = wholesalerPrice.boxSize || 25;
+          const pricePerBox = wholesalerPrice.pricePerBox || (flower.pricing.pricePerStem * boxSize);
+          const pricePerStem = wholesalerPrice.pricePerStem || flower.pricing.pricePerStem;
+          
           flowerCopy.pricing = {
-            pricePerBox: wholesalerPrice.pricePerBox || flower.pricing.pricePerBox,
-            boxQuantity: wholesalerPrice.boxSize || flower.pricing.boxSize || flower.pricing.boxEquivalent || 25,
-            pricePerStem: wholesalerPrice.pricePerStem || flower.pricing.pricePerStem,
-            minQuantity: wholesalerPrice.boxSize || flower.pricing.boxSize || flower.pricing.boxEquivalent || 25,
+            pricePerBox: pricePerBox,
+            boxQuantity: boxSize,
+            pricePerStem: pricePerStem,
+            minQuantity: boxSize,
             displayUnit: 'box',
-            displayPrice: wholesalerPrice.pricePerBox || flower.pricing.pricePerBox,
-            displayText: `€${wholesalerPrice.pricePerBox || flower.pricing.pricePerBox} per box (${wholesalerPrice.boxSize || flower.pricing.boxSize || flower.pricing.boxEquivalent || 25} stems)`,
+            displayPrice: pricePerBox,
+            displayText: `€${pricePerBox} per box (${boxSize} stems)`,
             currency: 'EUR'
           };
         } else if (userType === 'florist') {
           // Florist sees per-stem pricing
-          const floristPrice = flower.pricing.florist || flower.pricing;
+          const floristPrice = flower.pricing.florist || {};
+          const pricePerStem = floristPrice.pricePerStem || flower.pricing.pricePerStem;
+          const minQuantity = floristPrice.minQuantity || 1;
+          
           flowerCopy.pricing = {
-            pricePerStem: floristPrice.pricePerStem || flower.pricing.pricePerStem,
-            minQuantity: floristPrice.minQuantity || flower.pricing.minQuantity || 1,
+            pricePerStem: pricePerStem,
+            minQuantity: minQuantity,
             displayUnit: 'stem',
-            displayPrice: floristPrice.pricePerStem || flower.pricing.pricePerStem,
-            displayText: `€${floristPrice.pricePerStem || flower.pricing.pricePerStem} per stem`,
+            displayPrice: pricePerStem,
+            displayText: `€${pricePerStem} per stem`,
             currency: 'EUR'
           };
         } else if (userType === 'admin') {
           // Admin sees both pricing structures for management
-          const wholesalerPrice = flower.pricing.wholesaler || flower.pricing;
-          const floristPrice = flower.pricing.florist || flower.pricing;
+          const wholesalerPrice = flower.pricing.wholesaler || {};
+          const floristPrice = flower.pricing.florist || {};
+          const boxSize = wholesalerPrice.boxSize || 25;
+          const pricePerBox = wholesalerPrice.pricePerBox || (flower.pricing.pricePerStem * boxSize);
+          const wholesalePricePerStem = wholesalerPrice.pricePerStem || flower.pricing.pricePerStem;
+          const floristPricePerStem = floristPrice.pricePerStem || flower.pricing.pricePerStem;
+          
           flowerCopy.pricing = {
             wholesaler: {
-              pricePerBox: wholesalerPrice.pricePerBox || flower.pricing.pricePerBox,
-              boxQuantity: wholesalerPrice.boxSize || flower.pricing.boxSize || flower.pricing.boxEquivalent || 25,
-              pricePerStem: wholesalerPrice.pricePerStem || flower.pricing.pricePerStem
+              pricePerBox: pricePerBox,
+              boxQuantity: boxSize,
+              pricePerStem: wholesalePricePerStem
             },
             florist: {
-              pricePerStem: floristPrice.pricePerStem || flower.pricing.pricePerStem,
-              minQuantity: floristPrice.minQuantity || flower.pricing.minQuantity || 1
+              pricePerStem: floristPricePerStem,
+              minQuantity: floristPrice.minQuantity || 1
             },
             displayUnit: 'both',
-            displayText: `Wholesale: €${wholesalerPrice.pricePerBox || flower.pricing.pricePerBox}/box | Retail: €${floristPrice.pricePerStem || flower.pricing.pricePerStem}/stem`,
+            displayText: `Wholesale: €${pricePerBox}/box | Retail: €${floristPricePerStem}/stem`,
             currency: 'EUR'
           };
         } else {
           // Default florist pricing for other roles
-          const floristPrice = flower.pricing.florist || flower.pricing;
+          const floristPrice = flower.pricing.florist || {};
+          const pricePerStem = floristPrice.pricePerStem || flower.pricing.pricePerStem;
+          const minQuantity = floristPrice.minQuantity || 1;
+          
           flowerCopy.pricing = {
-            pricePerStem: floristPrice.pricePerStem || flower.pricing.pricePerStem,
-            minQuantity: floristPrice.minQuantity || flower.pricing.minQuantity || 1,
+            pricePerStem: pricePerStem,
+            minQuantity: minQuantity,
             displayUnit: 'stem',
-            displayPrice: floristPrice.pricePerStem || flower.pricing.pricePerStem,
-            displayText: `€${floristPrice.pricePerStem || flower.pricing.pricePerStem} per stem`,
+            displayPrice: pricePerStem,
+            displayText: `€${pricePerStem} per stem`,
             currency: 'EUR'
           };
         }
@@ -180,13 +195,16 @@ router.get('/', async (req, res) => {
       // Default to florist pricing for unauthenticated users
       processedFlowers = flowers.map(flower => {
         const flowerCopy = { ...flower };
-        const floristPrice = flower.pricing.florist || flower.pricing;
+        const floristPrice = flower.pricing.florist || {};
+        const pricePerStem = floristPrice.pricePerStem || flower.pricing.pricePerStem;
+        const minQuantity = floristPrice.minQuantity || 1;
+        
         flowerCopy.pricing = {
-          pricePerStem: floristPrice.pricePerStem || flower.pricing.pricePerStem,
-          minQuantity: floristPrice.minQuantity || flower.pricing.minQuantity || 1,
+          pricePerStem: pricePerStem,
+          minQuantity: minQuantity,
           displayUnit: 'stem',
-          displayPrice: floristPrice.pricePerStem || flower.pricing.pricePerStem,
-          displayText: `€${floristPrice.pricePerStem || flower.pricing.pricePerStem} per stem`,
+          displayPrice: pricePerStem,
+          displayText: `€${pricePerStem} per stem`,
           currency: 'EUR'
         };
         return flowerCopy;
